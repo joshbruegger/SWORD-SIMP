@@ -39,7 +39,9 @@ def visualize_yolo_bboxes(image_path, output_path=None):
         ax.text(x, y-5, str(int(class_id)), fontsize=12, color='r')
 
     if output_path is not None:
-        plt.savefig(output_path, bbox_inches='tight', pad_inches=0)
+        dpi = fig.get_dpi()
+        fig.set_size_inches(width / dpi, height / dpi)
+        plt.savefig(output_path, dpi=dpi, bbox_inches='tight', pad_inches=0)
         print(f"Visualization saved to: {output_path}")
     else:
         plt.show()
