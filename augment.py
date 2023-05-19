@@ -1,4 +1,3 @@
-
 import os
 import argparse
 import cv2
@@ -22,6 +21,26 @@ def get_augmentation(crop_size, min_visibility):
     )
 
 
+def read_labels(labels_dir, filename):
+    label_filename = os.path.splitext(filename)[0] + '.txt'
+    with open(os.path.join(labels_dir, label_filename)) as f:
+        labels_and_bboxes = [line.strip().split() for line in f]
+        labels = [int(line[0]) for line in labels_and_bboxes]
+        bboxes = [list(map(float, line[1:])) for line in labels_and_bboxes]
+    return bboxes, labels
+
+
+def save_crops_and_labels(crops, crop_bboxes, crop_labels, output_images_dir, output_labels_dir, filename):
+    for i, (crop, boxes, labels) in enumerate(zip(crops, crop_bboxes, crop_labels)):  # Loop through crops
+        # Save crop
+        cv2.imwrite(os.path.join(output_images_dir,
+                    f'{os.path.splitext(filename)[0]}_{i}.jpg'), crop)
+        # Save labels
+        with open(os.path.join(output_labels_dir, f'{os.path.splitext(filename)[0]}_{i}.txt'), 'w') as f:
+            for box, label in zip(boxes, labels):
+                f.write(' '.join(map(str, [label] + list(box))) + '\n')
+
+
 def generate_crops(image, bboxes, labels, n_crops, min_crops, min_visibility):
     crops = []
     crop_bboxes = []
@@ -39,7 +58,31 @@ def generate_crops(image, bboxes, labels, n_crops, min_crops, min_visibility):
     return crops, crop_bboxes, crop_labels
 
 
-def main():
+def process_images(images_dir, labels_dir, output_images_dir, output_labels_dir, args):
+    for filename in os.listdir(images_dir):  # Loop through images
+        print(f'Generating crops for {filename}')
+
+        # Read image
+        image = cv2.imread(os.path.join(images_dir, filename))
+
+        # Read labels
+        bboxes, labels = read_labels(labels_dir, filename)
+
+        # Generate crops
+        crops, crop_bboxes, crop_labels = generate_crops(
+            image, bboxes, labels, args.n_crops, args.min_crops, args.min_visibility)
+
+        # print length of crops
+        print("Generated " + str(len(crops)) + " crops")
+
+        # Save crops and labels
+        save_crops_and_labels(crops, crop_bboxes, crop_labels,
+                              output_images_dir, output_labels_dir, filename)
+
+        print("Saved crops for " + filename + " successfully")
+
+
+def get_args():
     # Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('dir', help='Working directory')
@@ -48,7 +91,11 @@ def main():
                         help='Minimum number of bounding boxes per crop')
     parser.add_argument('--min_visibility', type=float, default=0.1,
                         help='Minimum visibility for bounding boxes')
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def main():
+    args = get_args()
 
     # Get input and output directories
     images_dir = os.path.join(args.dir, 'images')
@@ -60,37 +107,8 @@ def main():
     os.makedirs(output_images_dir, exist_ok=True)
     os.makedirs(output_labels_dir, exist_ok=True)
 
-    for filename in os.listdir(images_dir):  # Loop through images
-        print(f'Generating crops for {filename}')
-
-        # Read image
-        image = cv2.imread(os.path.join(images_dir, filename))
-
-        # Read labels
-        label_filename = os.path.splitext(filename)[0] + '.txt'
-        with open(os.path.join(labels_dir, label_filename)) as f:
-            labels_and_bboxes = [line.strip().split() for line in f]
-            labels = [int(line[0]) for line in labels_and_bboxes]
-            bboxes = [list(map(float, line[1:])) for line in labels_and_bboxes]
-
-        # Generate crops
-        crops, crop_bboxes, crop_labels = generate_crops(
-            image, bboxes, labels, args.n_crops, args.min_crops, args.min_visibility)
-
-        # print lenght of crops
-        print("Generated " + str(len(crops)) + " crops")
-
-        # Save crops and labels
-        for i, (crop, boxes, labels) in enumerate(zip(crops, crop_bboxes, crop_labels)):  # Loop through crops
-            # Save crop
-            cv2.imwrite(os.path.join(output_images_dir,
-                        f'{os.path.splitext(filename)[0]}_{i}.jpg'), crop)
-            # Save labels
-            with open(os.path.join(output_labels_dir, f'{os.path.splitext(filename)[0]}_{i}.txt'), 'w') as f:
-                for box, label in zip(boxes, labels):
-                    f.write(' '.join(map(str, [label] + list(box))) + '\n')
-
-        print("Saved crops for " + filename + " successfully")
+    process_images(images_dir, labels_dir, output_images_dir,
+                   output_labels_dir, args)
 
 
 if __name__ == '__main__':
