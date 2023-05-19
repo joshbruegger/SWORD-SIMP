@@ -3,3 +3,4 @@ super-gradients
 imutils
 roboflow
 pytube
+albumentations

@@ -48,7 +48,7 @@ function writeBoudingBoxesToFile(layerInfo, doc) {
     for (var i = 0; i < layerInfo.length; i++) {
         var info = layerInfo[i];
         var folder = info.folder || "Root";
-        file.writeln(folder.replace(/\?/g, "") + " " + info.centerX.toFixed(4) + " " + info.centerY.toFixed(4) + " " + info.width.toFixed(4) + " " + info.height.toFixed(4));
+        file.writeln(folder.replace(/\?/g, "") + " " + info.centerX.toFixed(8) + " " + info.centerY.toFixed(8) + " " + info.width.toFixed(8) + " " + info.height.toFixed(8));
     }
 
     file.close();
