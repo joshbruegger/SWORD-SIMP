@@ -11,9 +11,6 @@ def generate_random_crop_size(min_size=640, max_size=1024, factor=32):
     return np.random.choice(sizes), np.random.choice(sizes)
 
 
-s
-
-
 def get_augmentation(crop_size, min_visibility):
     return A.Compose(
         [A.RandomCrop(height=crop_size[0], width=crop_size[1], p=1.0)],
