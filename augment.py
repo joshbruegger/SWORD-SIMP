@@ -1,5 +1,6 @@
 import os
 import argparse
+import shutil
 import cv2
 import numpy as np
 import albumentations as A
@@ -102,6 +103,20 @@ def main():
     labels_dir = os.path.join(args.dir, 'labels')
     output_images_dir = os.path.join(args.dir, 'augmented', 'images')
     output_labels_dir = os.path.join(args.dir, 'augmented', 'labels')
+
+    # Check if augmented folder already exists
+    augmented_folder = os.path.join(args.dir, 'augmented')
+    if os.path.exists(augmented_folder):
+        user_input = input(
+            "The 'augmented' folder already exists. Do you want to delete it and proceed? (y/n): ")
+        while user_input.lower() not in ['y', 'n']:
+            user_input = input(
+                "The 'augmented' folder already exists. Do you want to delete it and proceed? (y/n): ")
+        if user_input.lower() == 'y':
+            shutil.rmtree(augmented_folder)
+        elif user_input.lower() == 'n':
+            print("Exiting...")
+            return
 
     # Create output directories
     os.makedirs(output_images_dir, exist_ok=True)
