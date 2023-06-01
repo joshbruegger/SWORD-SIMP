@@ -4,6 +4,7 @@ import shutil
 import cv2
 import numpy as np
 import albumentations as A
+from psd_tools import PSDImage
 
 
 def generate_random_crop_coordinates(image_width, image_height, min_size=640, max_size=1024, factor=32):
@@ -75,7 +76,15 @@ def process_images(images_dir, labels_dir, output_images_dir, output_labels_dir,
         print(f'Generating crops for {filename}')
 
         # Read image
-        image = cv2.imread(os.path.join(images_dir, filename))
+        if filename.endswith('.psb') or filename.endswith('.psd'):
+            psd = PSDImage.open(os.path.join(images_dir, filename))
+            image = cv2.cvtColor(psd[0].numpy(), cv2.COLOR_RGB2BGR)
+            image *= 255
+        elif filename.endswith('.jpg') or filename.endswith('.png'):
+            image = cv2.imread(os.path.join(images_dir, filename))
+        else:
+            print(f'Unsupported file format: {filename}')
+            continue
 
         # Read labels
         bboxes, labels = read_labels(labels_dir, filename)
