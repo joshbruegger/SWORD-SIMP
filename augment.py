@@ -6,14 +6,24 @@ import numpy as np
 import albumentations as A
 
 
-def generate_random_crop_size(min_size=640, max_size=1024, factor=32):
-    sizes = range(min_size, max_size+1, factor)
-    return np.random.choice(sizes), np.random.choice(sizes)
+def generate_random_crop_coordinates(image_width, image_height, min_size=640, max_size=1024, factor=32):
+    sizes = range(min_size, max_size + 1, factor)
+    width, height = np.random.choice(sizes), np.random.choice(sizes)
+
+    # Ensure crop dimensions do not exceed image dimensions
+    width, height = min(width, image_width), min(height, image_height)
+
+    x_min = np.random.randint(0, image_width - width)
+    y_min = np.random.randint(0, image_height - height)
+    x_max = x_min + width
+    y_max = y_min + height
+
+    return x_min, y_min, x_max, y_max
 
 
-def get_augmentation(crop_size, min_visibility):
+def get_augmentation(crop_coordinates, min_visibility):
     return A.Compose(
-        [A.RandomCrop(height=crop_size[0], width=crop_size[1], p=1.0)],
+        [A.Crop(*crop_coordinates, always_apply=True)],
         bbox_params=A.BboxParams(
             format='yolo',
             min_visibility=min_visibility,
@@ -48,8 +58,9 @@ def generate_crops(image, bboxes, labels, n_crops, min_crops, min_visibility):
     crop_labels = []
 
     while len(crops) < n_crops:
-        crop_size = generate_random_crop_size()
-        transform = get_augmentation(crop_size, min_visibility)
+        crop_coordinates = generate_random_crop_coordinates(
+            image.shape[1], image.shape[0])
+        transform = get_augmentation(crop_coordinates, min_visibility)
         augmented = transform(image=image, bboxes=bboxes, labels=labels)
         if len(augmented['bboxes']) >= min_crops:
             crops.append(augmented['image'])
