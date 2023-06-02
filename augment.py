@@ -1,46 +1,41 @@
-import os
 import argparse
-import shutil
 import cv2
 import numpy as np
 import albumentations as A
+import shutil
+from pathlib import Path
 from psd_tools import PSDImage
 
 
 class ImageAugmenter:
     def __init__(self, dir, n_crops, min_crops=1, min_visibility=0.1, force=False):
-        self.dir = dir
+        self.dir = Path(dir)
         self.n_crops = n_crops
         self.min_crops = min_crops
         self.min_visibility = min_visibility
+        self.augmented_folder = self.dir / 'augmented'
+        self.images_dir = self.dir / 'images'
+        self.labels_dir = self.dir / 'labels'
+        self.output_images_dir = self.augmented_folder / 'images'
+        self.output_labels_dir = self.augmented_folder / 'labels'
 
-        self.images_dir = os.path.join(self.dir, 'images')
-        self.labels_dir = os.path.join(self.dir, 'labels')
-        self.output_images_dir = os.path.join(self.dir, 'augmented', 'images')
-        self.output_labels_dir = os.path.join(self.dir, 'augmented', 'labels')
-        self.augmented_folder = os.path.join(self.dir, 'augmented')
+        if self.augmented_folder.exists() and not force:
+            while True:
+                print('Augmented folder already exists, delete it? (y/n)')
+                user_input = input().lower()
+                if user_input == 'y':
+                    shutil.rmtree(self.augmented_folder)
+                    break
+                elif user_input == 'n':
+                    exit()
 
-        # Ask user if they want to delete the augmented folder, if force is not set to true
-        if os.path.exists(self.augmented_folder):
-            if force:
-                shutil.rmtree(self.augmented_folder)
-            else:
-                while True:
-                    print('Augmented folder already exists, delete it? (y/n)')
-                    if input().lower() == 'y':
-                        shutil.rmtree(self.augmented_folder)
-                        break
-                    elif input().lower() == 'n':
-                        exit()
-
-        os.makedirs(self.output_images_dir, exist_ok=True)
-        os.makedirs(self.output_labels_dir, exist_ok=True)
+        self.output_images_dir.mkdir(parents=True, exist_ok=True)
+        self.output_labels_dir.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
     def generate_random_crop_coordinates(image_width, image_height, min_size=640, max_size=1024, factor=32):
         sizes = range(min_size, max_size + 1, factor)
         width, height = np.random.choice(sizes), np.random.choice(sizes)
-
         width, height = min(width, image_width), min(height, image_height)
 
         x_min = np.random.randint(0, image_width - width)
@@ -61,75 +56,56 @@ class ImageAugmenter:
         )
 
     def read_labels(self, filename):
-        label_filename = os.path.splitext(filename)[0] + '.txt'
-        with open(os.path.join(self.labels_dir, label_filename)) as f:
+        label_filename = (self.labels_dir / filename.stem).with_suffix('.txt')
+        with open(label_filename, 'r') as f:
             labels_and_bboxes = [line.strip().split() for line in f]
             labels = [int(line[0]) for line in labels_and_bboxes]
             bboxes = [list(map(float, line[1:])) for line in labels_and_bboxes]
         return bboxes, labels
 
     def save_crops_and_labels(self, crops, crop_bboxes, crop_labels, filename):
-        for i, (crop, boxes, labels) in enumerate(zip(crops, crop_bboxes, crop_labels)):  # Loop through crops
-            cv2.imwrite(os.path.join(self.output_images_dir,
-                        f'{os.path.splitext(filename)[0]}_{i}.jpg'), crop)
-
-            with open(os.path.join(self.output_labels_dir, f'{os.path.splitext(filename)[0]}_{i}.txt'), 'w') as f:
+        for i, (crop, boxes, labels) in enumerate(zip(crops, crop_bboxes, crop_labels)):
+            cv2.imwrite(str(self.output_images_dir /
+                        f'{filename.stem}_{i}.jpg'), crop)
+            with open(self.output_labels_dir / f'{filename.stem}_{i}.txt', 'w') as f:
                 for box, label in zip(boxes, labels):
                     f.write(' '.join(map(str, [label] + list(box))) + '\n')
 
     def generate_crops(self, image, bboxes, labels, history, filename):
-        crops = []
-        crop_bboxes = []
-        crop_labels = []
-
+        crops, crop_bboxes, crop_labels = [], [], []
         while len(crops) < self.n_crops:
-            print('trying to generate crop')
             crop_coordinates = self.generate_random_crop_coordinates(
                 image.shape[1], image.shape[0])
             transform = self.get_augmentation(crop_coordinates)
             augmented = transform(image=image, bboxes=bboxes, labels=labels)
             if len(augmented['bboxes']) >= self.min_crops:
-                print('crop generated')
                 crops.append(augmented['image'])
                 crop_bboxes.append(augmented['bboxes'])
                 crop_labels.append(augmented['labels'])
-                history.append([filename] + list(crop_coordinates))
-                print(history)
-
+                history.append([filename.stem] + list(crop_coordinates))
         return crops, crop_bboxes, crop_labels
 
     def process_images(self):
         history = []
-
-        for filename in os.listdir(self.images_dir):
-            print(f'Generating crops for {filename}')
-
-            if filename.endswith('.psb') or filename.endswith('.psd'):
-                psd = PSDImage.open(os.path.join(self.images_dir, filename))
-                image = cv2.cvtColor(psd[0].numpy(), cv2.COLOR_RGB2BGR)
-                image *= 255
-            elif filename.endswith('.jpg') or filename.endswith('.png'):
-                image = cv2.imread(os.path.join(self.images_dir, filename))
-            else:
+        for filename in self.images_dir.iterdir():
+            if filename.suffix not in ['.psb', '.psd', '.jpg', '.png']:
                 print(f'Unsupported file format: {filename}')
                 continue
 
             bboxes, labels = self.read_labels(filename)
+            image = cv2.imread(str(filename)) if filename.suffix in ['.jpg', '.png'] else \
+                cv2.cvtColor(PSDImage.open(filename)[
+                             0].numpy(), cv2.COLOR_RGB2BGR) * 255
 
             crops, crop_bboxes, crop_labels = self.generate_crops(
                 image, bboxes, labels, history, filename)
 
-            print("Generated " + str(len(crops)) + " crops")
-
             self.save_crops_and_labels(
                 crops, crop_bboxes, crop_labels, filename)
 
-            print("Saved crops for " + filename + " successfully")
-
-        with open(os.path.join(self.augmented_folder, 'crops.txt'), 'a') as crops_txt:
-            print("Writing crop history to crops.txt")
-            for crop in history:
-                crops_txt.write(' '.join(map(str, crop)) + '\n')
+        with open(self.augmented_folder / 'crops.txt', 'a') as crops_txt:
+            crops_txt.write(
+                '\n'.join([' '.join(map(str, crop)) for crop in history]))
 
 
 def get_args():
@@ -147,8 +123,6 @@ def get_args():
 
 if __name__ == '__main__':
     args = get_args()
-
     augmenter = ImageAugmenter(
         args.dir, args.n_crops, args.min_crops, args.min_visibility, args.force)
-
     augmenter.process_images()
