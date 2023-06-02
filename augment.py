@@ -57,6 +57,7 @@ def generate_crops(image, bboxes, labels, n_crops, min_crops, min_visibility):
     crops = []
     crop_bboxes = []
     crop_labels = []
+    history = []
 
     while len(crops) < n_crops:
         crop_coordinates = generate_random_crop_coordinates(
@@ -67,11 +68,12 @@ def generate_crops(image, bboxes, labels, n_crops, min_crops, min_visibility):
             crops.append(augmented['image'])
             crop_bboxes.append(augmented['bboxes'])
             crop_labels.append(augmented['labels'])
+            history.append(crop_coordinates)
 
-    return crops, crop_bboxes, crop_labels
+    return crops, crop_bboxes, crop_labels, history
 
 
-def process_images(images_dir, labels_dir, output_images_dir, output_labels_dir, args):
+def process_images(images_dir, labels_dir, output_images_dir, output_labels_dir, args, history_txt):
     for filename in os.listdir(images_dir):  # Loop through images
         print(f'Generating crops for {filename}')
 
@@ -90,8 +92,12 @@ def process_images(images_dir, labels_dir, output_images_dir, output_labels_dir,
         bboxes, labels = read_labels(labels_dir, filename)
 
         # Generate crops
-        crops, crop_bboxes, crop_labels = generate_crops(
+        crops, crop_bboxes, crop_labels, history = generate_crops(
             image, bboxes, labels, args.n_crops, args.min_crops, args.min_visibility)
+
+        # Write history to txt file,  formatted as filename x_min y_min x_max y_max for each crop
+        for crop in history:
+            history_txt.write(filename + ' ' + ' '.join(map(str, crop)) + '\n')
 
         # print length of crops
         print("Generated " + str(len(crops)) + " crops")
@@ -142,8 +148,9 @@ def main():
     os.makedirs(output_images_dir, exist_ok=True)
     os.makedirs(output_labels_dir, exist_ok=True)
 
-    process_images(images_dir, labels_dir, output_images_dir,
-                   output_labels_dir, args)
+    with open(os.path.join(args.dir, 'crops.txt'), 'w+') as crops_txt:
+        process_images(images_dir, labels_dir, output_images_dir,
+                       output_labels_dir, args, crops_txt)
 
 
 if __name__ == '__main__':
