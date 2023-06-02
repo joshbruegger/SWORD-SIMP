@@ -8,7 +8,7 @@ from psd_tools import PSDImage
 
 
 class ImageAugmenter:
-    def __init__(self, dir, n_crops, min_crops=1, min_visibility=0.1, force=False):
+    def __init__(self, dir, n_crops, min_crops=1, min_visibility=0.1, force=False, crop_file=None):
         self.dir = Path(dir)
         self.n_crops = n_crops
         self.min_crops = min_crops
@@ -18,6 +18,17 @@ class ImageAugmenter:
         self.labels_dir = self.dir / 'labels'
         self.output_images_dir = self.augmented_folder / 'images'
         self.output_labels_dir = self.augmented_folder / 'labels'
+        self.crop_file = crop_file
+        if self.crop_file:
+            # Recover crop coordinates from file for images that have already been augmented
+            with open(self.crop_file, 'r') as f:
+                self.to_regenerate = {}
+                for line in f:
+                    line = line.strip().split()
+                    if line[0] not in self.to_regenerate:
+                        self.to_regenerate[line[0]] = []
+                    self.to_regenerate[line[0]].append(
+                        list(map(int, line[1:])))
 
         if self.augmented_folder.exists() and not force:
             while True:
@@ -72,7 +83,24 @@ class ImageAugmenter:
                     f.write(' '.join(map(str, [label] + list(box))) + '\n')
 
     def generate_crops(self, image, bboxes, labels, history, filename):
+        print(f'Generating crops for {filename.stem}')
         crops, crop_bboxes, crop_labels = [], [], []
+
+        if self.crop_file:
+            print("regenerating crops for", filename.stem)
+            if filename.stem in self.to_regenerate:
+                for crop_coordinates in self.to_regenerate[filename.stem]:
+                    transform = self.get_augmentation(crop_coordinates)
+                    augmented = transform(
+                        image=image, bboxes=bboxes, labels=labels)
+                    crops.append(augmented['image'])
+                    crop_bboxes.append(augmented['bboxes'])
+                    crop_labels.append(augmented['labels'])
+                    history.append([filename.stem] + crop_coordinates)
+            else:
+                print("fatal: no crop coordinates found for image", filename.stem)
+                exit()
+
         while len(crops) < self.n_crops:
             crop_coordinates = self.generate_random_crop_coordinates(
                 image.shape[1], image.shape[0])
@@ -118,11 +146,13 @@ def get_args():
                         help='Minimum visibility for bounding boxes')
     parser.add_argument('--force', action='store_true',
                         help="Force the removal of the existing 'augmented' directory if it exists")
+    parser.add_argument('--crop_file', type=str, default=None,
+                        help="File containing pre-generated crop coordinates")
     return parser.parse_args()
 
 
 if __name__ == '__main__':
     args = get_args()
     augmenter = ImageAugmenter(
-        args.dir, args.n_crops, args.min_crops, args.min_visibility, args.force)
+        args.dir, args.n_crops, args.min_crops, args.min_visibility, args.force, args.crop_file)
     augmenter.process_images()
