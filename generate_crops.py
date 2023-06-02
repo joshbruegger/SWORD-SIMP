@@ -7,13 +7,13 @@ from pathlib import Path
 from psd_tools import PSDImage
 
 
-class ImageAugmenter:
+class ImageCropper:
     def __init__(self, dir, n_crops, min_crops=1, min_visibility=0.1, force=False, crop_file=None):
         self.dir = Path(dir)
         self.n_crops = n_crops
         self.min_crops = min_crops
         self.min_visibility = min_visibility
-        self.augmented_folder = self.dir / 'augmented'
+        self.augmented_folder = self.dir / 'cropped'
         self.images_dir = self.dir / 'images'
         self.labels_dir = self.dir / 'labels'
         self.output_images_dir = self.augmented_folder / 'images'
@@ -31,14 +31,8 @@ class ImageAugmenter:
                         list(map(int, line[1:])))
 
         if self.augmented_folder.exists() and not force:
-            while True:
-                print('Augmented folder already exists, delete it? (y/n)')
-                user_input = input().lower()
-                if user_input == 'y':
-                    shutil.rmtree(self.augmented_folder)
-                    break
-                elif user_input == 'n':
-                    exit()
+            print("cropped folder already exists, use --force to overwrite")
+            exit()
 
         self.output_images_dir.mkdir(parents=True, exist_ok=True)
         self.output_labels_dir.mkdir(parents=True, exist_ok=True)
@@ -145,7 +139,7 @@ def get_args():
     parser.add_argument('--min_visibility', type=float, default=0.1,
                         help='Minimum visibility for bounding boxes')
     parser.add_argument('--force', action='store_true',
-                        help="Force the removal of the existing 'augmented' directory if it exists")
+                        help="Force the removal of the existing 'cropped' directory if it exists")
     parser.add_argument('--crop_file', type=str, default=None,
                         help="File containing pre-generated crop coordinates")
     return parser.parse_args()
@@ -153,6 +147,6 @@ def get_args():
 
 if __name__ == '__main__':
     args = get_args()
-    augmenter = ImageAugmenter(
+    augmenter = ImageCropper(
         args.dir, args.n_crops, args.min_crops, args.min_visibility, args.force, args.crop_file)
     augmenter.process_images()
