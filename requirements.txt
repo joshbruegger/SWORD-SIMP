@@ -4,3 +4,4 @@ imutils
 roboflow
 pytube
 albumentations
+psd_tools
