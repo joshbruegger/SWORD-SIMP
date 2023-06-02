@@ -1,6 +1,6 @@
 import os
 from psd_tools import PSDImage
-import numpy as np
+import argparse
 
 
 def get_layer_center(layer):
@@ -43,11 +43,12 @@ def process_layers(layers, layer_info, parent_folder_name):
             process_layer(layer, layer_info, parent_folder_name)
 
 
-def write_bouding_boxes_to_file(layer_info, filename):
-    file_path = os.path.dirname(filename)
+def write_bouding_boxes_to_file(layer_info, filename, output):
+    file_path = output
     file_name = os.path.basename(filename).split('.')[0]
+    os.makedirs(file_path, exist_ok=True)
     file = open(os.path.join(file_path, file_name + '.txt'),
-                'w', encoding='UTF-8')
+                'w+', encoding='UTF-8')
 
     for info in layer_info:
         folder = info['folder'] or 'Root'
@@ -57,32 +58,57 @@ def write_bouding_boxes_to_file(layer_info, filename):
                                                              info['width'],
                                                              info['height']))
     file.close()
-    print("Bounding boxes have been saved to {}.txt in the same folder as the open file.".format(file_name))
+    print("Bounding boxes have been saved.".format(file_name))
 
 
-def write_classes_to_file(layer_info, filename):
+def write_classes_to_file(layer_info, filename, output):
     unique_folders = set()
     for info in layer_info:
         folder = info['folder'] or 'Root'
         unique_folders.add(folder.replace('?', ''))
 
-    file_path = os.path.dirname(filename)
+    file_path = output
     file_name = os.path.basename(filename).split('.')[0]
+    os.makedirs(file_path, exist_ok=True)
     file = open(os.path.join(file_path, file_name +
-                '_classes.txt'), 'w', encoding='UTF-8')
+                '_classes.txt'), 'w+', encoding='UTF-8')
 
     for folder in unique_folders:
         file.write("{}\n".format(folder))
 
     file.close()
-    print("Class names have been saved to {}_classes.txt in the same folder as the open file.".format(file_name))
+    print("Class names have been saved.".format(file_name))
 
 
-if __name__ == "__main__":
-    file_path = './dataset/all/images/fatto_unito.psb'
+def process_psd_file(file_path, output_folder):
     psd = PSDImage.open(file_path)
     layer_info = []
     process_layers(psd, layer_info, None)
+    write_bouding_boxes_to_file(layer_info, file_path, output_folder)
+    write_classes_to_file(layer_info, file_path, output_folder)
 
-    write_bouding_boxes_to_file(layer_info, file_path)
-    write_classes_to_file(layer_info, file_path)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('file_path', type=str,
+                        help='File path to the PSD file or directory with PSD files.')
+    parser.add_argument('--o', type=str, default=None,
+                        help='Output folder for the generated text files.')
+    args = parser.parse_args()
+
+    file_path = args.file_path
+    output_folder = args.o
+    if output_folder is None:
+        output_folder = os.path.dirname(file_path)
+
+    # Check if given path is a directory or a file
+    if os.path.isdir(file_path):
+        # If it's a directory, process all files in that directory
+        for filename in os.listdir(file_path):
+            if filename.endswith(".psd") or filename.endswith(".psb"):
+                print("Processing {}".format(filename))
+                process_psd_file(os.path.join(
+                    file_path, filename), output_folder)
+    elif file_path.endswith(".psd") or file_path.endswith(".psb"):
+        # If it's a file, process the file
+        process_psd_file(file_path, output_folder)
