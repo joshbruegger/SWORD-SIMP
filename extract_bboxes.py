@@ -21,7 +21,8 @@ def get_layer_center(layer):
 
 
 def process_layer(layer, layer_info, parent_folder_name):
-    if layer.is_visible():
+    # Ignore background layers
+    if not layer.name.startswith('Sfondo') or layer.name.startswith('Background'):
         layer_center = get_layer_center(layer)
         if (layer_center['width'] > 0 and layer_center['height'] > 0):
             layer_info.append({
@@ -35,7 +36,7 @@ def process_layer(layer, layer_info, parent_folder_name):
 
 
 def process_layers(layers, layer_info, parent_folder_name):
-    for layer in layers[1:]:
+    for layer in layers:
         if layer.is_group():
             process_layers(layer, layer_info, layer.name)
         else:
