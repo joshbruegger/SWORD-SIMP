@@ -6,9 +6,14 @@ import matplotlib.patches as patches
 from psd_tools import PSDImage
 
 
-def visualize_yolo_bboxes(image_path, output_path=None):
+def visualize_yolo_bboxes(image_path, output_path=None, labels_dir=None):
     # Check if the .txt file exists
-    txt_path = os.path.splitext(image_path)[0] + '.txt'
+    if labels_dir is not None:
+        txt_path = os.path.join(labels_dir, os.path.splitext(
+            os.path.basename(image_path))[0] + '.txt')
+    else:
+        txt_path = os.path.splitext(image_path)[0] + '.txt'
+
     if not os.path.exists(txt_path):
         print(f"No .txt file found for image: {image_path}")
         return
@@ -56,13 +61,19 @@ def visualize_yolo_bboxes(image_path, output_path=None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Visualize YOLO bounding boxes")
-    parser.add_argument("image_path", help="Path to the .png image file")
-    parser.add_argument("-o", "--output", dest="output_path", nargs='?', const=True,
-                        help="Path to save the visualization image or flag to save with default name", default=None)
+    parser.add_argument("image_path", help="Path to the image file")
+    parser.add_argument("-o", "--output", dest="output_path", default=None,
+                        help="Path to save the visualization image or flag to save with default name")
+    parser.add_argument("-l", "--labels", dest="labels_dir", default=None,
+                        help="Path to the directory containing the labels")
     args = parser.parse_args()
 
-    if args.output_path is True:
+    if args.output_path is None:
         args.output_path = os.path.join(os.path.dirname(
             args.image_path), f"visualization_{os.path.basename(args.image_path)}")
 
-    visualize_yolo_bboxes(args.image_path, args.output_path)
+    labels_dir = args.labels_dir
+    if args.labels_dir is None:
+        labels_dir = os.path.dirname(args.image_path)
+
+    visualize_yolo_bboxes(args.image_path, args.output_path, labels_dir)
