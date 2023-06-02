@@ -3,6 +3,7 @@ import os
 import cv2
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+from psd_tools import PSDImage
 
 
 def visualize_yolo_bboxes(image_path, output_path=None):
@@ -13,8 +14,13 @@ def visualize_yolo_bboxes(image_path, output_path=None):
         return
 
     # Read the image
-    image = cv2.imread(image_path)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    if image_path.endswith('.psb') or image_path.endswith('.psd'):
+        psd = PSDImage.open(image_path)
+        image = cv2.cvtColor(psd[0].numpy(), cv2.COLOR_RGB2BGR)
+        image *= 255
+    else:
+        image = cv2.imread(image_path)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     height, width, _ = image.shape
 
     # Read the bounding boxes
