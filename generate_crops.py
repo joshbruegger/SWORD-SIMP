@@ -2,7 +2,6 @@ import argparse
 import cv2
 import numpy as np
 import albumentations as A
-import shutil
 from pathlib import Path
 from psd_tools import PSDImage
 
