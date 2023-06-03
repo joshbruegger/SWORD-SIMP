@@ -94,6 +94,8 @@ def process_psd_file(file_path, output_folder):
 
 
 if __name__ == "__main__":
+    print("Extracting bounding boxes...")
+
     parser = argparse.ArgumentParser()
     parser.add_argument('file_path', type=str,
                         help='File path to the PSD file or directory with PSD files.')

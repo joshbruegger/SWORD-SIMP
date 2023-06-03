@@ -146,6 +146,8 @@ def get_args():
 
 
 if __name__ == '__main__':
+    print('Generating crops...')
+
     args = get_args()
     augmenter = ImageCropper(
         args.dir, args.n_crops, args.min_crops, args.min_visibility, args.force, args.crop_file)

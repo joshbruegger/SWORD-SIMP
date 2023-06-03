@@ -4,6 +4,8 @@ import argparse
 
 
 if __name__ == '__main__':
+    print("Downloading files...")
+
     parser = argparse.ArgumentParser()
     parser.add_argument('output', help='Download directory')
     parser.add_argument('-f', '--force', action='store_true',

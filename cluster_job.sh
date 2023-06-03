@@ -3,7 +3,7 @@
 #SBATCH --output=job-%j.log
 #SBATCH --nodes=1
 #SBATCH --gpus-per-node=a100:1
-#SBATCH --mem=16G
+#SBATCH --mem=32G
 #SBATCH --partition=gpu
 #SBATCH --time=00:30:00
 
