@@ -4,13 +4,13 @@ import argparse
 
 
 if __name__ == '__main__':
-    print("Downloading files...")
-
     parser = argparse.ArgumentParser()
     parser.add_argument('output', help='Download directory')
     parser.add_argument('-f', '--force', action='store_true',
                         help="Force the removal of the existing 'cropped' directory if it exists")
     args = parser.parse_args()
+
+    print("Downloading files...")
 
     if os.path.exists(args.output) and not args.force:
         print("Output directory already exists. Use --force to overwrite.")

@@ -94,14 +94,14 @@ def process_psd_file(file_path, output_folder):
 
 
 if __name__ == "__main__":
-    print("Extracting bounding boxes...")
-
     parser = argparse.ArgumentParser()
     parser.add_argument('file_path', type=str,
                         help='File path to the PSD file or directory with PSD files.')
     parser.add_argument('-o', '--output', type=str, default=None,
                         help='Output folder for the generated text files.')
     args = parser.parse_args()
+
+    print("Extracting bounding boxes...")
 
     file_path = args.file_path
     output_folder = args.output

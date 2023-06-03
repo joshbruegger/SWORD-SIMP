@@ -146,18 +146,20 @@ def get_args():
 
 
 if __name__ == '__main__':
+    args = get_args()
     print('Generating crops...')
 
-    args = get_args()
     augmenter = ImageCropper(
         args.dir, args.n_crops, args.min_crops, args.min_visibility, args.force, args.crop_file)
 
     start_time = time.time()
     augmenter.process_images()
+    end_time = time.time()
 
-    if (time.time() - start_time) > 3600:
-        print(f'Finished in {(time.time() - start_time)/3600:.2f} hours')
-    elif (time.time() - start_time) > 60:
-        print(f'Finished in {(time.time() - start_time)/60:.2f} minutes')
+    duration = end_time - start_time
+    if (duration) > 3600:
+        print(f'Finished in {(duration)/3600:.2f} hours')
+    elif (duration) > 60:
+        print(f'Finished in {(duration)/60:.2f} minutes')
     else:
-        print(f'Finished in {time.time() - start_time:.2f} seconds')
+        print(f'Finished in {duration:.2f} seconds')

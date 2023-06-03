@@ -59,8 +59,6 @@ def visualize_yolo_bboxes(image_path, output_path=None, labels_dir=None):
 
 
 if __name__ == "__main__":
-    print("Visualizing YOLO bounding...")
-
     parser = argparse.ArgumentParser(
         description="Visualize YOLO bounding boxes")
     parser.add_argument("image_path", help="Path to the image file")
@@ -69,6 +67,8 @@ if __name__ == "__main__":
     parser.add_argument("-l", "--labels", dest="labels_dir", default=None,
                         help="Path to the directory containing the labels")
     args = parser.parse_args()
+
+    print("Visualizing YOLO bounding...")
 
     if args.output_path is None:
         args.output_path = os.path.join(os.path.dirname(
