@@ -21,7 +21,8 @@ fi
 # Activate the virtual environment
 source $HOME/.envs/thesis_env/bin/activate
 
-# Run the shell script
+# Run the setup script
+chmod +x setup.sh
 bash setup.sh
 
 deactivate
