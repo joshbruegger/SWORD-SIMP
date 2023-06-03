@@ -35,7 +35,7 @@ pip install -r $WORKDIR/requirements.txt
 python $WORKDIR/download.py $SCRATCH/dataset/source/images
 
 # generate the bboxes
-python $WORKDIR/generate_bboxes.py $SCRATCH/dataset/source/images -o $SCRATCH/dataset/source/labels
+python $WORKDIR/extract_bboxes.py $SCRATCH/dataset/source/images -o $SCRATCH/dataset/source/labels
 
 # generate crops
 python $WORKDIR/generate_crops.py $SCRATCH/dataset/source/ 10
