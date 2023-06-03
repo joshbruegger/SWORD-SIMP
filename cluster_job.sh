@@ -13,7 +13,7 @@ module purge
 module load PyTorch/1.12.1-foss-2022a-CUDA-11.7.0
 
 # Activate the virtual environment
-source ~/thesis/env/bin/activate
+source $HOME/.envs/thesis_env/bin/activate
 
 # Run the shell script
 bash setup.sh
