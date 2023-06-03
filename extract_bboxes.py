@@ -92,7 +92,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('file_path', type=str,
                         help='File path to the PSD file or directory with PSD files.')
-    parser.add_argument('--o', type=str, default=None,
+    parser.add_argument('-o', '--output', type=str, default=None,
                         help='Output folder for the generated text files.')
     args = parser.parse_args()
 

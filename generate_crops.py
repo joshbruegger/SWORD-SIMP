@@ -134,13 +134,13 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('dir', help='Working directory')
     parser.add_argument('n_crops', type=int, help='Number of crops per image')
-    parser.add_argument('--min_crops', type=int, default=1,
+    parser.add_argument('-c', '--min_crops', type=int, default=1,
                         help='Minimum number of bounding boxes per crop')
-    parser.add_argument('--min_visibility', type=float, default=0.1,
+    parser.add_argument('-v', '--min_visibility', type=float, default=0.1,
                         help='Minimum visibility for bounding boxes')
-    parser.add_argument('--force', action='store_true',
+    parser.add_argument('-f', '--force', action='store_true',
                         help="Force the removal of the existing 'cropped' directory if it exists")
-    parser.add_argument('--crop_file', type=str, default=None,
+    parser.add_argument('-r', '--crop_file', type=str, default=None,
                         help="File containing pre-generated crop coordinates")
     return parser.parse_args()
 
