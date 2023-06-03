@@ -29,7 +29,7 @@ source $HOME/.envs/thesis_env/bin/activate
 
 # make sure the requirements are installed
 pip install --upgrade pip
-pip install -r requirements.txt
+pip install -r $WORKDIR/requirements.txt
 
 # download dataset using the download script in work dir
 python $WORKDIR/download.py $SCRATCH/dataset/source/images
