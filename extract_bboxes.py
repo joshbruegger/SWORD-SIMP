@@ -97,7 +97,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     file_path = args.file_path
-    output_folder = args.o
+    output_folder = args.output
     if output_folder is None:
         output_folder = os.path.dirname(file_path)
 
