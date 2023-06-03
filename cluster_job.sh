@@ -15,9 +15,9 @@ module load OpenCV/4.6.0-foss-2022a-contrib #3.10.4
 
 # Save working directory in variable
 WORKDIR=$SLURM_SUBMIT_DIR
+SCRATCH=/scratch/$USER
 
-cd $TMPDIR
-
+# Create scratch directory
 # Check if the virtual environment exists
 if [ ! -d "$HOME/.envs/thesis_env" ]; then
     # Create the virtual environment
