@@ -1,6 +1,7 @@
 import os
 from psd_tools import PSDImage
 import argparse
+import gc
 
 
 def get_layer_center(layer):
@@ -86,6 +87,10 @@ def process_psd_file(file_path, output_folder):
     process_layers(psd, layer_info, None)
     write_bouding_boxes_to_file(layer_info, file_path, output_folder)
     write_classes_to_file(layer_info, file_path, output_folder)
+    # free memory
+    del psd
+    del layer_info
+    gc.collect()
 
 
 if __name__ == "__main__":
