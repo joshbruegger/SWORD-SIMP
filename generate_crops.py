@@ -1,5 +1,6 @@
 import argparse
 import cv2
+import time
 import numpy as np
 import albumentations as A
 from pathlib import Path
@@ -148,4 +149,13 @@ if __name__ == '__main__':
     args = get_args()
     augmenter = ImageCropper(
         args.dir, args.n_crops, args.min_crops, args.min_visibility, args.force, args.crop_file)
+
+    start_time = time.time()
     augmenter.process_images()
+
+    if (time.time() - start_time) > 3600:
+        print(f'Finished in {(time.time() - start_time)/3600:.2f} hours')
+    elif (time.time() - start_time) > 60:
+        print(f'Finished in {(time.time() - start_time)/60:.2f} minutes')
+    else:
+        print(f'Finished in {time.time() - start_time:.2f} seconds')

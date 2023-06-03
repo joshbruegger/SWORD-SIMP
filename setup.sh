@@ -11,4 +11,4 @@ python download.py dataset/source/images
 python generate_bboxes.py dataset/source/images -o dataset/source/labels
 
 # generate crops
-python generate_crops.py dataset/source/ 2
+python generate_crops.py dataset/source/ 10
