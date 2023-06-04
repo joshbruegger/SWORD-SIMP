@@ -14,6 +14,17 @@
 # -n <number>: number of crops to generate
 # combination of flags is possible (e.g. -bc), except for -n
 
+# Help function
+function usage {
+    echo "Usage: $0 [-d] [-b] [-c] [-n <number>]"
+    echo "  -d: force download of dataset"
+    echo "  -b: force generation of bboxes"
+    echo "  -c: force generation of crops"
+    echo "  -n <number>: number of crops to generate (default = 10)"
+    echo "  combination of flags is possible (e.g. -bc), except for -n"
+    exit 1
+}
+
 # Process flags
 d=false
 b=false
@@ -24,11 +35,22 @@ while getopts ":dbcn:" opt; do
         d) d=true;;
         b) b=true;;
         c) c=true;;
-        n) n="$OPTARG";;
+        n) n="$OPTARG"
+            if ! [[ "$n" =~ ^[0-9]+$ ]] ; then
+                echo "error: -n argument is not a number" >&2
+                usage
+            fi;;
         \?) echo "Invalid option -$OPTARG" >&2
-            exit 1;;
+            usage;;
     esac
 done
+
+# Print flags
+echo "Starting the job."
+echo "Force download of database = $d"
+echo "Force generation of bboxes = $b"
+echo "Forcegeneration of crops = $c"
+echo "Number of crops = $n"
 
 # Clear the module environment
 module purge
