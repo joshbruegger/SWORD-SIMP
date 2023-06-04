@@ -1,6 +1,8 @@
 import argparse
 import cv2
 import time
+import multiprocessing
+from joblib import Parallel, delayed
 import numpy as np
 import albumentations as A
 from pathlib import Path
@@ -92,8 +94,7 @@ class ImageCropper:
                     crop_labels.append(augmented['labels'])
                     history.append([filename.stem] + crop_coordinates)
             else:
-                print("fatal: no crop coordinates found for image", filename.stem)
-                exit()
+                raise RuntimeError("No crop coordinates found for image")
 
         while len(crops) < self.n_crops:
             crop_coordinates = self.generate_random_crop_coordinates(
@@ -107,27 +108,34 @@ class ImageCropper:
                 history.append([filename.stem] + list(crop_coordinates))
         return crops, crop_bboxes, crop_labels
 
-    def process_images(self):
+    def process_image(self, filename):
+        if filename.suffix not in ['.psb', '.psd', '.jpg', '.png']:
+            print(f'Unsupported file format: {filename}')
+            return []
+
+        bboxes, labels = self.read_labels(filename)
+        image = cv2.imread(str(filename)) if filename.suffix in ['.jpg', '.png'] else \
+            cv2.cvtColor(PSDImage.open(filename)[
+                0].numpy(), cv2.COLOR_RGB2BGR) * 255
+
         history = []
-        for filename in self.images_dir.iterdir():
-            if filename.suffix not in ['.psb', '.psd', '.jpg', '.png']:
-                print(f'Unsupported file format: {filename}')
-                continue
+        crops, crop_bboxes, crop_labels = self.generate_crops(
+            image, bboxes, labels, history, filename)
 
-            bboxes, labels = self.read_labels(filename)
-            image = cv2.imread(str(filename)) if filename.suffix in ['.jpg', '.png'] else \
-                cv2.cvtColor(PSDImage.open(filename)[
-                             0].numpy(), cv2.COLOR_RGB2BGR) * 255
+        self.save_crops_and_labels(
+            crops, crop_bboxes, crop_labels, filename)
 
-            crops, crop_bboxes, crop_labels = self.generate_crops(
-                image, bboxes, labels, history, filename)
+        return history
 
-            self.save_crops_and_labels(
-                crops, crop_bboxes, crop_labels, filename)
+    def process_images(self):
+        n_jobs = multiprocessing.cpu_count()  # Number of cores
+        histories = Parallel(n_jobs=n_jobs)(delayed(self.process_image)(
+            filename) for filename in self.images_dir.iterdir())
 
         with open(self.augmented_folder / 'crops.txt', 'a') as crops_txt:
-            crops_txt.write(
-                '\n'.join([' '.join(map(str, crop)) for crop in history]))
+            for history in histories:
+                crops_txt.write(
+                    '\n'.join([' '.join(map(str, crop)) for crop in history]))
 
 
 def get_args():

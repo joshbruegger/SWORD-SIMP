@@ -2,10 +2,8 @@
 #SBATCH --job-name=thesis
 #SBATCH --output=job-%j.log
 #SBATCH --nodes=1
-#SBATCH --gpus-per-node=a100:1
 #SBATCH --mem=32G
-#SBATCH --partition=gpu
-#SBATCH --time=00:30:00
+#SBATCH --time=00:10:00
 
 # Accept flags from the command line:
 # -d: force download of dataset
