@@ -47,7 +47,7 @@ done
 echo "Starting the job."
 echo "Force download of database = $d"
 echo "Force generation of bboxes = $b"
-echo "Forcegeneration of crops = $c"
+echo "Force generation of crops = $c"
 echo "Number of crops = $n"
 
 # Clear the module environment
