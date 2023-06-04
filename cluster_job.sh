@@ -7,6 +7,29 @@
 #SBATCH --partition=gpu
 #SBATCH --time=00:30:00
 
+# Accept flags from the command line:
+# -d: force download of dataset
+# -b: force generation of bboxes
+# -c: force generation of crops
+# -n <number>: number of crops to generate
+# combination of flags is possible (e.g. -bc), except for -n
+
+# Process flags
+d=false
+b=false
+c=false
+n=10
+while getopts ":dbcn:" opt; do
+    case $opt in
+        d) d=true;;
+        b) b=true;;
+        c) c=true;;
+        n) n="$OPTARG";;
+        \?) echo "Invalid option -$OPTARG" >&2
+            exit 1;;
+    esac
+done
+
 # Clear the module environment
 module purge
 # Load the Python version that has been used to construct the virtual environment
@@ -31,13 +54,25 @@ source $HOME/.envs/thesis_env/bin/activate
 pip install --upgrade pip
 pip install -r $WORKDIR/requirements.txt
 
-# download dataset using the download script in work dir
-python $WORKDIR/download.py $SCRATCH/dataset/source/images
+# download dataset using the download script in work dir (force if flag is set)
+if [ "$d" = true ] ; then
+    python $WORKDIR/download.py $SCRATCH/dataset/source/images -f
+else
+    python $WORKDIR/download.py $SCRATCH/dataset/source/images
+fi
 
-# generate the bboxes
-python $WORKDIR/extract_bboxes.py $SCRATCH/dataset/source/images -o $SCRATCH/dataset/source/labels
+# generate the bboxes (force if flag is set)
+if [ "$b" = true ] ; then
+    python $WORKDIR/extract_bboxes.py $SCRATCH/dataset/source/images -o $SCRATCH/dataset/source/labels -f
+else
+    python $WORKDIR/extract_bboxes.py $SCRATCH/dataset/source/images -o $SCRATCH/dataset/source/labels
+fi
 
-# generate crops
-python $WORKDIR/generate_crops.py $SCRATCH/dataset/source/ 10
+# generate crops (force if flag is set)
+if [ "$c" = true ] ; then
+    python $WORKDIR/generate_crops.py $SCRATCH/dataset/source/ $n -f
+else
+    python $WORKDIR/generate_crops.py $SCRATCH/dataset/source/ $n
+fi
 
 deactivate
