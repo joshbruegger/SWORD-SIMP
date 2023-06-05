@@ -51,7 +51,7 @@ echo "Starting the job!"
 echo "Force download of database = $d"
 echo "Force generation of bboxes = $b"
 echo "Force generation of crops = $c"
-
+echo "Force generation of environment = $e"
 echo "Number of crops = $n"
 
 echo "Loading modules..."
