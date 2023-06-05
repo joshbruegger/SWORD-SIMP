@@ -1,7 +1,7 @@
 import gdown
 import os
 import argparse
-
+import shutil
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -12,9 +12,12 @@ if __name__ == '__main__':
 
     print("Downloading files...")
 
-    if os.path.exists(args.output) and not args.force:
-        print("Output directory already exists. Use --force to overwrite.")
-        exit()
+    if os.path.exists(args.output):
+        if args.force:
+            shutil.rmtree(args.output)
+        else:
+            print("Output directory already exists. Use --force to overwrite.")
+            exit()
 
     url = "https://drive.google.com/drive/folders/1Ouga4ms22NK-sDUkI4MoFqHuhxG2qG1i"
     gdown.download_folder(url, use_cookies=False,

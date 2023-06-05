@@ -2,7 +2,7 @@ import os
 from psd_tools import PSDImage
 import argparse
 import gc
-
+import shutil
 
 def get_layer_center(layer):
     bounds = layer.bbox
@@ -23,7 +23,7 @@ def get_layer_center(layer):
 
 def process_layer(layer, layer_info, parent_folder_name):
     # Ignore background layers
-    if not layer.name.startswith('Sfondo') or layer.name.startswith('Background'):
+    if not (layer.name.startswith('Sfondo') or layer.name.startswith('Background')):
         layer_center = get_layer_center(layer)
         if (layer_center['width'] > 0 and layer_center['height'] > 0):
             layer_info.append({
@@ -34,7 +34,6 @@ def process_layer(layer, layer_info, parent_folder_name):
                 'width': layer_center['width'],
                 'height': layer_center['height']
             })
-
 
 def process_layers(layers, layer_info, parent_folder_name):
     for layer in layers:
@@ -52,8 +51,10 @@ def write_bouding_boxes_to_file(layer_info, filename, output):
                 'w+', encoding='UTF-8')
 
     for info in layer_info:
-        folder = info['folder'] or 'Root'
-        file.write("{} {:.8f} {:.8f} {:.8f} {:.8f}\n".format(folder.replace('?', ''),
+        # Skip background layers (no folder)
+        if info['folder'] is None:
+            continue
+        file.write("{} {:.8f} {:.8f} {:.8f} {:.8f}\n".format(info['folder'].replace('?', '').replace('-grandi', ''),
                                                              info['centerX'],
                                                              info['centerY'],
                                                              info['width'],
@@ -99,6 +100,8 @@ if __name__ == "__main__":
                         help='File path to the PSD file or directory with PSD files.')
     parser.add_argument('-o', '--output', type=str, default=None,
                         help='Output folder for the generated text files.')
+    parser.add_argument('-f', '--force', action='store_true',
+                        help="Force the overwriting of existing files.")
     args = parser.parse_args()
 
     print("Extracting bounding boxes...")
@@ -107,6 +110,16 @@ if __name__ == "__main__":
     output_folder = args.output
     if output_folder is None:
         output_folder = os.path.dirname(file_path)
+
+    # Check if output folder already exists
+    if os.path.exists(output_folder):
+        if args.force:
+            print("Output folder already exists. Deleting folder...")
+            shutil.rmtree(output_folder)
+        else:
+            # If it exists and force is not set, exit
+            print("Output folder already exists. Please delete the folder or use the --force option.")
+            exit()
 
     # Check if given path is a directory or a file
     if os.path.isdir(file_path):

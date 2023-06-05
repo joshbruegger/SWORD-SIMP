@@ -1,7 +1,9 @@
 import argparse
 import cv2
 import time
-import multiprocessing
+import os
+import gc
+import shutil
 from joblib import Parallel, delayed
 import numpy as np
 import albumentations as A
@@ -10,7 +12,7 @@ from psd_tools import PSDImage
 
 
 class ImageCropper:
-    def __init__(self, dir, n_crops, min_crops=1, min_visibility=0.1, force=False, crop_file=None):
+    def __init__(self, dir, n_crops, min_crops=1, min_visibility=0.1, force=False, crop_file=None, processes=1):
         self.dir = Path(dir)
         self.n_crops = n_crops
         self.min_crops = min_crops
@@ -21,6 +23,7 @@ class ImageCropper:
         self.output_images_dir = self.augmented_folder / 'images'
         self.output_labels_dir = self.augmented_folder / 'labels'
         self.crop_file = crop_file
+        self.processes = processes
         if self.crop_file:
             # Recover crop coordinates from file for images that have already been augmented
             with open(self.crop_file, 'r') as f:
@@ -32,9 +35,13 @@ class ImageCropper:
                     self.to_regenerate[line[0]].append(
                         list(map(int, line[1:])))
 
-        if self.augmented_folder.exists() and not force:
-            print("cropped folder already exists, use --force to overwrite")
-            exit()
+        if self.augmented_folder.exists():
+            if not force:
+                print("Cropped folder already exists, use --force to overwrite")
+                exit()
+            else:
+                print("Removing existing cropped folder")
+                shutil.rmtree(self.augmented_folder)
 
         self.output_images_dir.mkdir(parents=True, exist_ok=True)
         self.output_labels_dir.mkdir(parents=True, exist_ok=True)
@@ -66,7 +73,7 @@ class ImageCropper:
         label_filename = (self.labels_dir / filename.stem).with_suffix('.txt')
         with open(label_filename, 'r') as f:
             labels_and_bboxes = [line.strip().split() for line in f]
-            labels = [int(line[0]) for line in labels_and_bboxes]
+            labels = [line[0] for line in labels_and_bboxes]
             bboxes = [list(map(float, line[1:])) for line in labels_and_bboxes]
         return bboxes, labels
 
@@ -80,10 +87,12 @@ class ImageCropper:
 
     def generate_crops(self, image, bboxes, labels, history, filename):
         print(f'Generating crops for {filename.stem}')
+        start_time = time.time()
+
         crops, crop_bboxes, crop_labels = [], [], []
 
         if self.crop_file:
-            print("regenerating crops for", filename.stem)
+            print("Regenerating crops for", filename.stem)
             if filename.stem in self.to_regenerate:
                 for crop_coordinates in self.to_regenerate[filename.stem]:
                     transform = self.get_augmentation(crop_coordinates)
@@ -106,21 +115,33 @@ class ImageCropper:
                 crop_bboxes.append(augmented['bboxes'])
                 crop_labels.append(augmented['labels'])
                 history.append([filename.stem] + list(crop_coordinates))
+
+        print(f'Generated crops for {filename.stem} in {time.time() - start_time:.2f}s')
         return crops, crop_bboxes, crop_labels
 
     def process_image(self, filename):
+        print(f'Processing {filename}')
+        
         if filename.suffix not in ['.psb', '.psd', '.jpg', '.png']:
             print(f'Unsupported file format: {filename}')
             return []
 
         bboxes, labels = self.read_labels(filename)
-        image = cv2.imread(str(filename)) if filename.suffix in ['.jpg', '.png'] else \
-            cv2.cvtColor(PSDImage.open(filename)[
-                0].numpy(), cv2.COLOR_RGB2BGR) * 255
+
+        if filename.suffix in ['.jpg', '.png']:
+            image = cv2.imread(str(filename))
+        else:
+            psd = PSDImage.open(filename)
+            image = cv2.cvtColor(psd[0].numpy(), cv2.COLOR_RGB2BGR) * 255
+            del psd
+            gc.collect()
 
         history = []
         crops, crop_bboxes, crop_labels = self.generate_crops(
             image, bboxes, labels, history, filename)
+        
+        del image
+        gc.collect()
 
         self.save_crops_and_labels(
             crops, crop_bboxes, crop_labels, filename)
@@ -128,14 +149,14 @@ class ImageCropper:
         return history
 
     def process_images(self):
-        n_jobs = multiprocessing.cpu_count()  # Number of cores
-        histories = Parallel(n_jobs=n_jobs)(delayed(self.process_image)(
+        print(f'Processing images using {self.processes} processes')
+
+        histories = Parallel(n_jobs=self.processes)(delayed(self.process_image)(
             filename) for filename in self.images_dir.iterdir())
 
         with open(self.augmented_folder / 'crops.txt', 'a') as crops_txt:
             for history in histories:
-                crops_txt.write(
-                    '\n'.join([' '.join(map(str, crop)) for crop in history]))
+                crops_txt.write('\n'.join([' '.join(map(str, crop)) for crop in history]))
 
 
 def get_args():
@@ -150,15 +171,25 @@ def get_args():
                         help="Force the removal of the existing 'cropped' directory if it exists")
     parser.add_argument('-r', '--crop_file', type=str, default=None,
                         help="File containing pre-generated crop coordinates")
+    parser.add_argument('-p', '--processes', type=int, default=None, help='Number of processes to use for multiprocessing')
     return parser.parse_args()
 
 
 if __name__ == '__main__':
+    
     args = get_args()
     print('Generating crops...')
 
+    # if the processes flag has been set, use that number of processes. otherwise, see if int(os.environ['SLURM_JOB_CPUS_PER_NODE']) is set, and use that number of processes. otherwise, use just 1 process.
+    if args.processes:
+        n_jobs = args.processes
+    elif 'SLURM_JOB_CPUS_PER_NODE' in os.environ:
+        n_jobs = int(os.environ['SLURM_JOB_CPUS_PER_NODE'])
+    else:
+        n_jobs = 1
+
     augmenter = ImageCropper(
-        args.dir, args.n_crops, args.min_crops, args.min_visibility, args.force, args.crop_file)
+        args.dir, args.n_crops, args.min_crops, args.min_visibility, args.force, args.crop_file, n_jobs)
 
     start_time = time.time()
     augmenter.process_images()
