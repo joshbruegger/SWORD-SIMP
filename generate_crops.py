@@ -87,7 +87,6 @@ class ImageCropper:
 
     def generate_crops(self, image, bboxes, labels, history, filename):
         print(f'Generating crops for {filename.stem}')
-        start_time = time.time()
 
         crops, crop_bboxes, crop_labels = [], [], []
 
@@ -116,10 +115,10 @@ class ImageCropper:
                 crop_labels.append(augmented['labels'])
                 history.append([filename.stem] + list(crop_coordinates))
 
-        print(f'Generated crops for {filename.stem} in {time.time() - start_time:.2f}s')
         return crops, crop_bboxes, crop_labels
 
     def process_image(self, filename):
+        start_time = time.time()
         print(f'Processing {filename}')
         
         if filename.suffix not in ['.psb', '.psd', '.jpg', '.png']:
@@ -146,6 +145,7 @@ class ImageCropper:
         self.save_crops_and_labels(
             crops, crop_bboxes, crop_labels, filename)
 
+        print(f'Processed{filename.stem} in {time.time() - start_time:.2f}s')
         return history
 
     def process_images(self):
