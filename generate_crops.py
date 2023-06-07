@@ -157,6 +157,7 @@ class ImageCropper:
         with open(self.augmented_folder / 'crops.txt', 'a') as crops_txt:
             for history in histories:
                 crops_txt.write('\n'.join([' '.join(map(str, crop)) for crop in history]))
+                crops_txt.write('\n')
 
 
 def get_args():
