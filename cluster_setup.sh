@@ -2,8 +2,8 @@
 #SBATCH --job-name=thesis
 #SBATCH --output=job-%j.log
 #SBATCH --cpus-per-task=1
-#SBATCH --mem=100G
-#SBATCH --time=01:00:00
+#SBATCH --mem=200G
+#SBATCH --time=10:00:00
 
 # Accept flags from the command line:
 # -d: force download of dataset
@@ -63,7 +63,6 @@ module load OpenCV/4.6.0-foss-2022a-contrib #3.10.4
 WORKDIR=$SLURM_SUBMIT_DIR
 SCRATCH=/scratch/$USER
 
-# Create scratch directory
 # Check if the virtual environment exists
 if [ ! -d "$HOME/.envs/thesis_env" ] || [ "$e" = true ] ; then
     echo "Creating virtual environment..."

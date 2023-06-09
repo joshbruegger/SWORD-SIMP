@@ -5,3 +5,4 @@ numpy
 opencv_python
 psd_tools
 pytz
+pandas
