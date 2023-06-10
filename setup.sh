@@ -1,14 +1,89 @@
-#! /bin/sh
+#!/bin/bash
+#SBATCH --job-name=thesis
+#SBATCH --output=job-%j.log
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=200G
+#SBATCH --time=06:00:00
 
-# make sure the requirements are installed
-pip install --upgrade pip
-pip install -r requirements.txt
+# Accept flags from the command line:
+# -d: force download of dataset
+# -b: force generation of bboxes
+# -c: force generation of crops
+# -n <number>: number of crops to generate
+# combination of flags is possible (e.g. -bc), except for -n
 
-# download dataset using the download script
-python download.py dataset/source/images
+# Help function
+function usage {
+    echo "Usage: $0 [-d] [-b] [-c] [-e] [-n <number>]"
+    echo "  -d: force download of dataset"
+    echo "  -b: force generation of bboxes"
+    echo "  -c: force generation of crops"
+    echo "  -e: force generation of environment"
+    echo "  -n <number>: number of crops to generate (default = 10)"
+    echo "  combination of flags is possible (e.g. -bc), except for -n"
+    exit 1
+}
 
-# generate the bboxes
-python generate_bboxes.py dataset/source/images -o dataset/source/labels
+# Process flags
+d=false
+b=false
+c=false
+e=false
+n=10000
+while getopts ":dbcen:" opt; do
+    case $opt in
+        d) d=true;;
+        b) b=true;;
+        c) c=true;;
+        e) e=true;;
+        n) n="$OPTARG"
+            if ! [[ "$n" =~ ^[0-9]+$ ]] ; then
+                echo "error: -n argument is not a number" >&2
+                usage
+            fi;;
+        \?) echo "Invalid option -$OPTARG" >&2
+            usage;;
+    esac
+done
 
-# generate crops
-python generate_crops.py dataset/source/ 10
+# Print flags
+echo "Starting the job!"
+echo "Force download of database = $d"
+echo "Force generation of bboxes = $b"
+echo "Force generation of crops = $c"
+echo "Force generation of environment = $e"
+echo "Number of crops = $n"
+
+WORKDIR=$SLURM_SUBMIT_DIR
+if [ -z "$WORKDIR" ] ; then
+    WORKDIR=$(pwd)
+fi
+
+SCRATCH=/scratch/$USER
+
+# Set up the environment (module load, virtual environment, requirements)
+chmod +x $WORKDIR/setup_env.sh
+$WORKDIR/setup_env.sh
+
+# download dataset using the download script in work dir (force if flag is set)
+if [ "$d" = true ] ; then
+    python3 -u $WORKDIR/download.py $SCRATCH/dataset/source/images -f
+else
+    python3 -u $WORKDIR/download.py $SCRATCH/dataset/source/images
+fi
+
+# generate the bboxes (force if flag is set)
+if [ "$b" = true ] ; then
+    python3 -u $WORKDIR/extract_bboxes.py $SCRATCH/dataset/source/images -o $SCRATCH/dataset/source/labels -f
+else
+    python3 -u $WORKDIR/extract_bboxes.py $SCRATCH/dataset/source/images -o $SCRATCH/dataset/source/labels
+fi
+
+# generate crops (force if flag is set)
+if [ "$c" = true ] ; then
+    python3 -u $WORKDIR/generate_crops.py $SCRATCH/dataset/source/ $n -f
+else
+    python3 -u $WORKDIR/generate_crops.py $SCRATCH/dataset/source/ $n
+fi
+
+deactivate
