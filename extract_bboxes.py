@@ -72,13 +72,9 @@ def write_classes_to_file(layer_info, filename, output):
     file_path = output
     file_name = os.path.basename(filename).split('.')[0]
     os.makedirs(file_path, exist_ok=True)
-    file = open(os.path.join(file_path, file_name +
-                '_classes.txt'), 'w+', encoding='UTF-8')
-
-    for folder in unique_folders:
-        file.write("{}\n".format(folder))
-
-    file.close()
+    with open(os.path.join(file_path, file_name + '_classes.txt'), 'w+', encoding='UTF-8') as file:
+        for folder in unique_folders:
+            file.write("{}\n".format(folder))
     print("Class names have been saved.".format(file_name))
 
 
