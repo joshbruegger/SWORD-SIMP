@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=thesis
+#SBATCH --job-name=thesis_preprocess
 #SBATCH --output=job-%j.log
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=200G
@@ -64,13 +64,14 @@ SCRATCH=/scratch/$USER
 # If e flag is set, delete the virtual environment if it exists
 if [ "$e" = true ] ; then
     if [ -d "$HOME/.envs/thesis_env" ] ; then
+        echo "Deleting virtual environment..."
         rm -rf $HOME/.envs/thesis_env
     fi
 fi
 
 # Set up the environment (module load, virtual environment, requirements)
 chmod +x $WORKDIR/setup_env.sh
-$WORKDIR/setup_env.sh
+source $WORKDIR/setup_env.sh
 
 # download dataset using the download script in work dir (force if flag is set)
 python3 -u $WORKDIR/download.py $SCRATCH/dataset/source/images $d
