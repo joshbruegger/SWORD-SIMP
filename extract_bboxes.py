@@ -72,10 +72,14 @@ def write_classes_to_file(layer_info, filename, output):
     file_path = output
     file_name = os.path.basename(filename).split('.')[0]
     os.makedirs(file_path, exist_ok=True)
+    classes = []
     with open(os.path.join(file_path, file_name + '_classes.txt'), 'w+', encoding='UTF-8') as file:
         for folder in unique_folders:
-            file.write("{}\n".format(folder))
+            c = folder.replace('?', '').replace('-grandi', '')
+            file.write("{}\n".format(c))
+            classes.append(c)
     print("Class names have been saved.".format(file_name))
+    return classes
 
 
 def process_psd_file(file_path, output_folder):
@@ -83,11 +87,12 @@ def process_psd_file(file_path, output_folder):
     layer_info = []
     process_layers(psd, layer_info, None)
     write_bouding_boxes_to_file(layer_info, file_path, output_folder)
-    write_classes_to_file(layer_info, file_path, output_folder)
+    c = write_classes_to_file(layer_info, file_path, output_folder)
     # free memory
     del psd
     del layer_info
     gc.collect()
+    return c
 
 
 if __name__ == "__main__":
@@ -117,14 +122,27 @@ if __name__ == "__main__":
             print("Output folder already exists. Please delete the folder or use the --force option.")
             exit()
 
+    classes = []
+    
     # Check if given path is a directory or a file
     if os.path.isdir(file_path):
         # If it's a directory, process all files in that directory
         for filename in os.listdir(file_path):
             if filename.endswith(".psd") or filename.endswith(".psb"):
                 print("Processing {}".format(filename))
-                process_psd_file(os.path.join(
+                c = process_psd_file(os.path.join(
                     file_path, filename), output_folder)
+                classes.extend(c)
     elif file_path.endswith(".psd") or file_path.endswith(".psb"):
         # If it's a file, process the file
-        process_psd_file(file_path, output_folder)
+        c = process_psd_file(file_path, output_folder)
+        classes.extend(c)
+    
+    # Remove duplicates and sort
+    classes = list(set(classes))
+    classes.sort()
+
+    # Write classes to file
+    with open(os.path.join(output_folder, 'classes.txt'), 'w+', encoding='UTF-8') as file:
+        for c in classes:
+            file.write("{}\n".format(c))
