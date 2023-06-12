@@ -18,7 +18,6 @@ def read_label_files(folder, cropped):
         if f.endswith(".txt") and not f.endswith("_classes.txt")
     ]
 
-    start_time = time.time()
     for i, filename in enumerate(tqdm(txt_files, desc="Reading files")):
         painting_name = filename.rsplit(".", 1)[0].split("_", 1)[-1]
         if cropped:
@@ -28,10 +27,6 @@ def read_label_files(folder, cropped):
             for line in file:
                 class_name = line.strip().split()[0]
                 classes[class_name][painting_name] += 1
-
-        elapsed_time = time.time() - start_time
-        estimated_time = elapsed_time / (i + 1) * len(txt_files)
-        # print(f"Estimated time remaining: {estimated_time - elapsed_time} seconds")
 
     return classes
 
@@ -162,7 +157,7 @@ def main():
     )
     painting_classes = read_label_files(os.path.join(args.location, "labels"), False)
 
-    output_path = os.path.join(args.location, "cropped_analysis/")
+    output_path = os.path.join(args.location, "cropped", "analysis/")
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 
