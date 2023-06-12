@@ -2,11 +2,11 @@
 
 echo "Loading modules..."
 module purge
-module load PyTorch/1.12.1-foss-2022a-CUDA-11.7.0 #3.10.4
+# module load PyTorch/1.12.1-foss-2022a-CUDA-11.7.0 #3.10.4
 module load OpenCV/4.6.0-foss-2022a-contrib #3.10.4
 
 # Check if the virtual environment exists
-if [ ! -d "$HOME/.envs/thesis_env" ] || [ "$e" = true ] ; then
+if [ ! -d "$HOME/.envs/thesis_env" ]; then
     echo "Creating virtual environment..."
     # Create the virtual environment
     python3 -m venv $HOME/.envs/thesis_env
