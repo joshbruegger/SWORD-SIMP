@@ -19,4 +19,5 @@ source $HOME/.envs/thesis_env/bin/activate
 # make sure the requirements are installed
 echo "Installing requirements..."
 pip3 install --upgrade pip
-pip3 install -r ./requirements.txt
+pip3 install --upgrade wheel
+pip3 install -v -r ./requirements.txt
