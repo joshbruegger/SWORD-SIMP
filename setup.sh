@@ -25,16 +25,16 @@ function usage {
 }
 
 # Process flags
-d=false
-b=false
-c=false
+d=""
+b=""
+c=""
 e=false
 n=10000
 while getopts ":dbcen:" opt; do
     case $opt in
-        d) d=true;;
-        b) b=true;;
-        c) c=true;;
+        d) d="-f";;
+        b) b="-f";;
+        c) c="-f";;
         e) e=true;;
         n) n="$OPTARG"
             if ! [[ "$n" =~ ^[0-9]+$ ]] ; then
@@ -54,36 +54,28 @@ echo "Force generation of crops = $c"
 echo "Force generation of environment = $e"
 echo "Number of crops = $n"
 
-WORKDIR=$SLURM_SUBMIT_DIR
-if [ -z "$WORKDIR" ] ; then
-    WORKDIR=$(pwd)
-fi
-
+WORKDIR=$(pwd)
 SCRATCH=/scratch/$USER
+
+# If e flag is set, delete the virtual environment if it exists
+if [ "$e" = true ] ; then
+    if [ -d "$HOME/.envs/thesis_env" ] ; then
+        rm -rf $HOME/.envs/thesis_env
+    fi
+fi
 
 # Set up the environment (module load, virtual environment, requirements)
 chmod +x $WORKDIR/setup_env.sh
 $WORKDIR/setup_env.sh
 
 # download dataset using the download script in work dir (force if flag is set)
-if [ "$d" = true ] ; then
-    python3 -u $WORKDIR/download.py $SCRATCH/dataset/source/images -f
-else
-    python3 -u $WORKDIR/download.py $SCRATCH/dataset/source/images
-fi
+python3 -u $WORKDIR/download.py $SCRATCH/dataset/source/images $d
 
 # generate the bboxes (force if flag is set)
-if [ "$b" = true ] ; then
-    python3 -u $WORKDIR/extract_bboxes.py $SCRATCH/dataset/source/images -o $SCRATCH/dataset/source/labels -f
-else
-    python3 -u $WORKDIR/extract_bboxes.py $SCRATCH/dataset/source/images -o $SCRATCH/dataset/source/labels
-fi
+python3 -u $WORKDIR/extract_bboxes.py $SCRATCH/dataset/source/images -o $SCRATCH/dataset/source/labels $b
 
 # generate crops (force if flag is set)
-if [ "$c" = true ] ; then
-    python3 -u $WORKDIR/generate_crops.py $SCRATCH/dataset/source/ $n -f
-else
-    python3 -u $WORKDIR/generate_crops.py $SCRATCH/dataset/source/ $n
-fi
+python3 -u $WORKDIR/generate_crops.py $SCRATCH/dataset/source/ $n $c
+python3 -u $WORKDIR/separate_crops.py $SCRATCH/dataset/source/ -o $SCRATCH/dataset/ $c
 
 deactivate
