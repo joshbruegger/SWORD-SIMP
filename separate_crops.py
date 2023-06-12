@@ -73,7 +73,7 @@ def main():
 
     output_dir = args.output
     if output_dir == "None":
-        output_dir = args.location
+        output_dir = os.path.join(args.location, "separated")
 
     # Check if the dataset has already been separated
     if os.path.exists(os.path.join(output_dir, "separated")):
@@ -83,16 +83,16 @@ def main():
             print("Dataset has already been separated. Use the -f flag to overwrite existing files.")
             exit()
 
-    painting_classes = read_label_files(os.path.join(args.location, "labels"))
+    painting_classes = read_label_files(os.path.join(args.locations, "labels"))
     most_shared = most_shared_classes(painting_classes)
     print(f"Painting that shares the most classes with others: {most_shared[0][0]} ({most_shared[0][1]} classes)")
 
-    train_images_dir = os.path.join(output_dir, "separated", "train", "images")
-    train_labels_dir = os.path.join(output_dir, "separated", "train", "labels")
-    val_images_dir = os.path.join(output_dir, "separated", "validation", "images")
-    val_labels_dir = os.path.join(output_dir, "separated", "validation", "labels")
-    test_images_dir = os.path.join(output_dir, "separated", "test", "images")
-    test_labels_dir = os.path.join(output_dir, "separated", "test", "labels")
+    train_images_dir = os.path.join(output_dir, "train", "images")
+    train_labels_dir = os.path.join(output_dir, "train", "labels")
+    val_images_dir = os.path.join(output_dir, "val", "images")
+    val_labels_dir = os.path.join(output_dir, "val", "labels")
+    test_images_dir = os.path.join(output_dir, "test", "images")
+    test_labels_dir = os.path.join(output_dir, "test", "labels")
 
     # Create the folders if they don't exist
     os.makedirs(train_images_dir, exist_ok=True)
@@ -139,6 +139,11 @@ def main():
             shutil.move(os.path.join(args.location, 'cropped', 'labels', filename), os.path.join(train_labels_dir, filename))
         elif filename in validation_files:
             shutil.move(os.path.join(args.location, 'cropped', 'labels', filename), os.path.join(val_labels_dir, filename))
+
+    # Make a classes.txt file containing all the classes in the dataset line by line
+    with open(os.path.join(output_dir, "classes.txt"), "w") as file:
+        for class_name in painting_classes:
+            file.write(class_name + "\n")
 
 if __name__ == "__main__":
     main()
