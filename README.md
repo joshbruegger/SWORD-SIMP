@@ -8,7 +8,7 @@ Use the setup.sh file to install the required packages, and download the dataset
 
 1. Clone the repository
 ```bash
-git clone https://github.com/joshbruegger/PunchDetect
+git clone https://github.com/joshbruegger/SWORD-SIMP
 ```
 2. Give the setup.sh file execution rights
 ```bash
