@@ -83,8 +83,12 @@ def main():
             print("Dataset has already been separated. Use the -f flag to overwrite existing files.")
             exit()
 
-    painting_classes = read_label_files(os.path.join(args.locations, "labels"))
+    # Move the classes.txt file to the output folder
+    shutil.move(os.path.join(args.location, "classes.txt"), os.path.join(output_dir, "classes.txt"))
+
+    painting_classes = read_label_files(os.path.join(args.location, "labels"))
     most_shared = most_shared_classes(painting_classes)
+    print(most_shared)
     print(f"Painting that shares the most classes with others: {most_shared[0][0]} ({most_shared[0][1]} classes)")
 
     train_images_dir = os.path.join(output_dir, "train", "images")

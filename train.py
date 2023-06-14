@@ -126,7 +126,7 @@ def train(config):
         "ema": True,
         "ema_params": {"decay": 0.9, "decay_type": "threshold"},
         "max_epochs": config.NUM_EPOCHS,
-        "mixed_precision": True,
+        "mixed_precision": True, # Only for GPU
         "loss": PPYoloELoss(
             use_static_assigner=False,
             num_classes=config.NUM_CLASSES,

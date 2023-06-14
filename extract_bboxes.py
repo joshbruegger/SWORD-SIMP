@@ -143,6 +143,6 @@ if __name__ == "__main__":
     classes.sort()
 
     # Write classes to file
-    with open(os.path.join(output_folder, 'classes.txt'), 'w+', encoding='UTF-8') as file:
+    with open(os.path.join(os.path.dirname(file_path), 'classes.txt'), 'w+', encoding='UTF-8') as file:
         for c in classes:
             file.write("{}\n".format(c))
