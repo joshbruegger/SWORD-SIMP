@@ -47,7 +47,7 @@ class ImageCropper:
         self.output_labels_dir.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
-    def generate_random_crop_coordinates(image_width, image_height, min_size=640, max_size=1024, factor=32):
+    def generate_random_crop_coordinates(image_width, image_height, min_size=1080, max_size=1080, factor=32):
         sizes = range(min_size, max_size + 1, factor)
         width, height = np.random.choice(sizes), np.random.choice(sizes)
         width, height = min(width, image_width), min(height, image_height)
@@ -145,7 +145,7 @@ class ImageCropper:
         self.save_crops_and_labels(
             crops, crop_bboxes, crop_labels, filename)
 
-        print(f'Processed{filename.stem} in {time.time() - start_time:.2f}s')
+        print(f'Processed {filename.stem} in {time.time() - start_time:.2f}s')
         return history
 
     def process_images(self):
