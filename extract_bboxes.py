@@ -67,7 +67,7 @@ def write_classes_to_file(layer_info, filename, output):
     unique_folders = set()
     for info in layer_info:
         folder = info['folder'] or 'Root'
-        unique_folders.add(folder.replace('?', ''))
+        unique_folders.add(folder.replace('?', '').replace('-grandi', ''))
 
     file_path = output
     file_name = os.path.basename(filename).split('.')[0]
