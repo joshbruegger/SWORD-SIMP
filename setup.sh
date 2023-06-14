@@ -20,7 +20,7 @@ function usage {
     echo "  -c: force generation of crops"
     echo "  -e: force generation of environment"
     echo "  -s: force separation of crops in train/val/test sets"
-    echo "  -n <number>: number of crops to generate (default = 10)"
+    echo "  -n <number>: number of crops to generate (default = 50)"
     echo "  combination of flags is possible (e.g. -bc), except for -n"
     exit 1
 }
@@ -31,7 +31,7 @@ b=""
 c=""
 s=""
 e=false
-n=10
+n=50
 while getopts ":dbcsen:" opt; do
     case $opt in
         d) d="-f";;
