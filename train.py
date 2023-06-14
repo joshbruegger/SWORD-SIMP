@@ -3,8 +3,13 @@
 
 import os
 import argparse
+import wandb
 
-from super_gradients.training import Trainer, models
+import requests
+import torch
+from PIL import Image
+
+from super_gradients.training import Trainer, dataloaders, models
 from super_gradients.training.dataloaders.dataloaders import (
     coco_detection_yolo_format_train, coco_detection_yolo_format_val
 )
@@ -14,21 +19,45 @@ from super_gradients.training.models.detection_models.pp_yolo_e import (
     PPYoloEPostPredictionCallback
 )
 
-class config:
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+
+class Config:
     args = None
+    NUM_EPOCHS = None
+    DATA_DIR = None
+    DATALOADER_PARAMS= None
+    CLASSES = []
+    NUM_CLASSES = None
 
     # constructor
     def __init__(self, args):
         self.args = args
+        self.NUM_EPOCHS = args.num_epochs
+        self.DATA_DIR = args.dir
+        self.DATALOADER_PARAMS={
+        'batch_size':args.batch_size,
+        'num_workers':args.num_workers,
+        }
+        with open(args.classes, 'r') as f:
+            for line in f:
+                self.CLASSES.append(line.strip())
+        self.NUM_CLASSES = len(self.CLASSES)
+
+        # Print out the configuration
+        print("Configuration:")
+        print("NUM_EPOCHS: {}".format(self.NUM_EPOCHS))
+        print("DATA_DIR: {}".format(self.DATA_DIR))
+        print("DATALOADER_PARAMS: {}".format(self.DATALOADER_PARAMS))
+        print("CLASSES: {}".format(self.CLASSES))
+        print("NUM_CLASSES: {}".format(self.NUM_CLASSES))
+
 
     #trainer params
     CHECKPOINT_DIR = 'checkpoints'
-    EXPERIMENT_NAME = 'SWORD_YOLO_NAS'
-    NUM_EPOCHS = args.num_epochs
+    EXPERIMENT_NAME = 'SWORDSIMP_YOLO_NAS'
+    
 
     #dataset params
-    DATA_DIR = args.dir
-
     TRAIN_IMAGES_DIR = 'train/images' #child dir of DATA_DIR where train images are
     TRAIN_LABELS_DIR = 'train/labels' #child dir of DATA_DIR where train labels are
 
@@ -42,22 +71,6 @@ class config:
     # model params
     MODEL_NAME = 'yolo_nas_l' # choose from yolo_nas_s, yolo_nas_m, yolo_nas_l
     PRETRAINED_WEIGHTS = 'coco' #only one option here: coco
-
-
-    CLASSES = []
-    with open(args.classes, 'r') as f:
-        for line in f:
-            CLASSES.append(line.strip())
-
-    NUM_CLASSES = len(CLASSES)
-
-    #dataloader params - you can add whatever PyTorch dataloader params you have
-    #could be different across train, val, and test
-    DATALOADER_PARAMS={
-    'batch_size':args.batch_size,
-    'num_workers':args.num_workers,
-    }
-
 
 
 def train(config):
@@ -133,7 +146,16 @@ def train(config):
                 )
             )
         ],
-        "metric_to_watch": 'mAP@0.50'
+        "metric_to_watch": 'mAP@0.50',
+        "sg_logger": "wandb_sg_logger",
+        "sg_logger_params":             # Params that will be passes to __init__ of the logger super_gradients.common.sg_loggers.wandb_sg_logger.WandBSGLogger
+        {
+            "project_name": "thesis", # W&B project name
+            "save_checkpoints_remote": True,
+            "save_tensorboard_remote": True,
+            "save_logs_remote": True,
+            "entity": "clowderbop-team",         # username or team name where you're sending runs
+        }
     }
 
     trainer.train(model=model, 
@@ -164,7 +186,9 @@ if __name__ == '__main__':
     parser.add_argument('--classes', '-c', type=str, default='classes.txt')
     parser.add_argument('--num_epochs', '-e', type=int, default=10)
     parser.add_argument('--batch_size', '-b', type=int, default=16)
-    parser.add_argument('--num_workers', '-w',type=int, default=4)
+    parser.add_argument('--num_workers', '-w',type=int, default=1)
 
-    config = config(parser.parse_args())
-    train(config)
+    args = parser.parse_args()
+    num_epochs = args.num_epochs
+    Config = Config(args)
+    train(Config)
