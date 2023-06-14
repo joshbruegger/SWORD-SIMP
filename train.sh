@@ -1,7 +1,8 @@
 #!/bin/bash
+#SBATCH --gpus-per-node=a100:1
 #SBATCH --job-name=thesis_train
-#SBATCH --output=job-%j.log
-#SBATCH --time=00:15:00
+#SBATCH --output=train-%j.log
+#SBATCH --time=00:10:00
 #SBATCH --mem=4G
 
 # Help function
@@ -27,14 +28,6 @@ done
 
 WORKDIR=$(pwd)
 SCRATCH=/scratch/$USER
-
-# If e flag is set, delete the virtual environment if it exists
-if [ "$e" = true ] ; then
-    if [ -d "$HOME/.envs/thesis_env" ] ; then
-        echo "Deleting virtual environment..."
-        rm -rf $HOME/.envs/thesis_env
-    fi
-fi
 
 # Set up the environment (module load, virtual environment, requirements)
 chmod +x $WORKDIR/setup_env.sh
