@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --job-name=thesis_preprocess
-#SBATCH --output=job-%j.log
+#SBATCH --output=setup-%j.log
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=200G
-#SBATCH --time=06:00:00
+#SBATCH --time=01:00:00
 
 # Accept flags from the command line:
 # -d: force download of dataset
@@ -31,7 +31,7 @@ b=""
 c=""
 s=""
 e=false
-n=10000
+n=10
 while getopts ":dbcsen:" opt; do
     case $opt in
         d) d="-f";;
