@@ -6,7 +6,7 @@ opencv_python
 psd_tools
 pytz
 pandas
-git+https://github.com/Deci-AI/super-gradients.git
+git+https://github.com/Deci-AI/super-gradients.git#egg=super_gradients
 wandb
 scikit-learn
 tqdm
