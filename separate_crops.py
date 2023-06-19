@@ -86,7 +86,7 @@ def main():
         output_dir = os.path.join(args.location, "separated")
 
     # Check if the dataset has already been separated
-    if os.path.exists(os.path.join(output_dir, "separated")):
+    if os.path.exists(output_dir):
         if args.force:
             print("Overwriting existing files")
         else:
