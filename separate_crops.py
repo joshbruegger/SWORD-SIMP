@@ -137,8 +137,13 @@ def main():
                 all_files.append(label_file)
 
     # Use train_test_split to create training and validation sets
-    train_files, validation_files, _, _ = train_test_split(all_files, all_classes, test_size=0.2, stratify=all_classes, random_state=420)
+    # Try stratifying by class, if that doesn't work, don't stratify
+    try:
+        train_files, validation_files, _, _ = train_test_split(all_files, all_classes, test_size=0.2, stratify=all_classes, random_state=420)
+    except ValueError:
+        train_files, validation_files, _, _ = train_test_split(all_files, all_classes, test_size=0.2, random_state=420)
 
+    
     # analyze_distribution(train_files, validation_files, args) #! Uncomment this line to print the distribution of classes in the training and validation sets. Takes a long time to run.
 
     # Then move the images/labels to their respective folders based on the split
