@@ -147,8 +147,8 @@ def main():
                 all_classes.append(class_name)
                 all_files.append(label_file)
 
-    # remove classes that are not shared between the classes and all_classes lists
-    classes = [class_name for class_name in classes if class_name in all_classes]
+    # only take the classes[] with the indices in all_classes[]
+    classes = [classes[i] for i in range(len(classes)) if i in all_classes]
 
     # save the classes to a file
     with open(os.path.join(output_dir, "data.yaml"), "w") as file:
