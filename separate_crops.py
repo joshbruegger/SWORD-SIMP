@@ -103,8 +103,8 @@ def main():
 
     train_images_dir = os.path.join(output_dir, "train", "images")
     train_labels_dir = os.path.join(output_dir, "train", "labels")
-    val_images_dir = os.path.join(output_dir, "val", "images")
-    val_labels_dir = os.path.join(output_dir, "val", "labels")
+    val_images_dir = os.path.join(output_dir, "valid", "images")
+    val_labels_dir = os.path.join(output_dir, "valid", "labels")
     test_images_dir = os.path.join(output_dir, "test", "images")
     test_labels_dir = os.path.join(output_dir, "test", "labels")
 
