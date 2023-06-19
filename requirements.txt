@@ -10,3 +10,4 @@ git+https://github.com/Deci-AI/super-gradients.git
 wandb
 scikit-learn
 tqdm
+natsort

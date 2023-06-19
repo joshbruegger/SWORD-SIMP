@@ -1,108 +1,125 @@
 import os
-from psd_tools import PSDImage
 import argparse
 import gc
 import shutil
+from psd_tools import PSDImage
+from natsort import os_sorted
 
-def get_layer_center(layer):
-    bounds = layer.bbox
-    docWidth = layer._psd.width
-    docHeight = layer._psd.height
-    centerX = ((bounds[0] + bounds[2]) / 2) / docWidth
-    centerY = ((bounds[1] + bounds[3]) / 2) / docHeight
-    width = (bounds[2] - bounds[0]) / docWidth
-    height = (bounds[3] - bounds[1]) / docHeight
+class PSDProcessor:
+    __slots__ = ['file_path', 'output_folder', 'classes', 'paintings']
 
-    return {
-        'x': centerX,
-        'y': centerY,
-        'width': width,
-        'height': height
-    }
+    def __init__(self, file_path, output_folder):
+        self.file_path = file_path
+        self.output_folder = output_folder
+        self.classes = set()
+        self.paintings = {} # Dictionary with filename as key and list of bounding boxes as value
+
+        os.makedirs(self.output_folder, exist_ok=True) # Create output folder if it doesn't exist
 
 
-def process_layer(layer, layer_info, parent_folder_name):
-    # Ignore background layers
-    if not (layer.name.startswith('Sfondo') or layer.name.startswith('Background')):
-        layer_center = get_layer_center(layer)
-        if (layer_center['width'] > 0 and layer_center['height'] > 0):
-            layer_info.append({
-                'name': layer.name,
-                'folder': parent_folder_name,
-                'centerX': layer_center['x'],
-                'centerY': layer_center['y'],
-                'width': layer_center['width'],
-                'height': layer_center['height']
-            })
+    @staticmethod
+    def clean_class_name(folder):
+        return folder.replace('?', '').replace('-grandi', '')
 
-def process_layers(layers, layer_info, parent_folder_name):
-    for layer in layers:
-        if layer.is_group():
-            process_layers(layer, layer_info, layer.name)
-        else:
-            process_layer(layer, layer_info, parent_folder_name)
+    @staticmethod
+    def get_layer_center(layer):
+        bounds = layer.bbox
+        doc_width, doc_height = layer._psd.size
+        center_x = ((bounds[0] + bounds[2]) / 2) / doc_width
+        center_y = ((bounds[1] + bounds[3]) / 2) / doc_height
+        width = (bounds[2] - bounds[0]) / doc_width
+        height = (bounds[3] - bounds[1]) / doc_height
 
+        return center_x, center_y, width, height
 
-def write_bouding_boxes_to_file(layer_info, filename, output):
-    file_path = output
-    file_name = os.path.basename(filename).split('.')[0]
-    os.makedirs(file_path, exist_ok=True)
-    file = open(os.path.join(file_path, file_name + '.txt'),
-                'w+', encoding='UTF-8')
+    def process_layer(self, layer, bboxes, parent_folder_name):
+        # Ignore background layers and groups
+        if layer.name.startswith(('Sfondo', 'Background')) or layer.is_group():
+            return
 
-    for info in layer_info:
-        # Skip background layers (no folder)
-        if info['folder'] is None:
-            continue
-        file.write("{} {:.8f} {:.8f} {:.8f} {:.8f}\n".format(info['folder'].replace('?', '').replace('-grandi', ''),
-                                                             info['centerX'],
-                                                             info['centerY'],
-                                                             info['width'],
-                                                             info['height']))
-    file.close()
-    print("Bounding boxes have been saved.".format(file_name))
+        center_x, center_y, width, height = self.get_layer_center(layer)
 
+        # Ignore layers with no width or height
+        if width == 0 or height == 0:
+            return
 
-def write_classes_to_file(layer_info, filename, output):
-    unique_folders = set()
-    for info in layer_info:
-        folder = info['folder'] or 'Root'
-        unique_folders.add(folder.replace('?', '').replace('-grandi', ''))
+        if not parent_folder_name:
+            print(f"Layer {layer.name} has no parent folder!!")
+            return
+        
+        class_name = self.clean_class_name(parent_folder_name)
+        self.classes.add(class_name)
+        bboxes.append({
+            'class': class_name,
+            'centerX': center_x,
+            'centerY': center_y,
+            'width': width,
+            'height': height
+        })
 
-    file_path = output
-    file_name = os.path.basename(filename).split('.')[0]
-    os.makedirs(file_path, exist_ok=True)
-    classes = []
-    with open(os.path.join(file_path, file_name + '_classes.txt'), 'w+', encoding='UTF-8') as file:
-        for folder in unique_folders:
-            c = folder.replace('?', '').replace('-grandi', '')
-            file.write("{}\n".format(c))
-            classes.append(c)
-    print("Class names have been saved.".format(file_name))
-    return classes
+    # Recursively process layers
+    def process_layers(self, layers, bboxes, parent_folder_name):
+        for layer in layers:
+            if layer.is_group():
+                self.process_layers(layer, bboxes, layer.name)
+                print(f"Processing folder {layer.name}")
+            else:
+                self.process_layer(layer, bboxes, parent_folder_name)
 
+    def write_bounding_boxes_to_file(self, bboxes, filename):
+        file_path = os.path.join(self.output_folder, f"{os.path.basename(filename).split('.')[0]}.txt")
 
-def process_psd_file(file_path, output_folder):
-    psd = PSDImage.open(file_path)
-    layer_info = []
-    process_layers(psd, layer_info, None)
-    write_bouding_boxes_to_file(layer_info, file_path, output_folder)
-    c = write_classes_to_file(layer_info, file_path, output_folder)
-    # free memory
-    del psd
-    del layer_info
-    gc.collect()
-    return c
+        with open(file_path, 'w+', encoding='UTF-8') as file:
+            for bbox in bboxes:
+                if not bbox['class']:
+                    continue
+                
+                line = f"{bbox['class']} {bbox['centerX']:.17f} {bbox['centerY']:.17f} {bbox['width']:.17f} {bbox['height']:.17f}\n"
+                file.write(line)
+
+        print(f"Bounding boxes for {filename} have been saved.")
+
+    def process_psd_file(self, filename):
+        print(f"Processing {filename}...")
+        
+        psd = PSDImage.open(filename)
+        bboxes = []
+        self.process_layers(psd, bboxes,  None)
+        self.paintings[filename] = bboxes
+
+        del psd
+        gc.collect()
+
+    def process_files(self):
+        # Process all PSD files in the folder
+        for filename in os.listdir(self.file_path):
+            if filename.endswith((".psd", ".psb")): # Only process PSD files
+                self.process_psd_file(os.path.join(self.file_path, filename))
+        
+        # Sort classes alphabetically, sorting the numbers as numbers
+        # e.g. a1, a2, a10 instead of a1, a10, a2
+        # or a_1, a_2, a_10 instead of a_1, a_10, a_2 etc.
+        # This is done to ensure that the class indices are consistent across all files
+        # self.classes = sorted(self.classes, key=lambda x: [int(c) if c.isdigit() else c for c in re.split('(\d+)', x)])
+        self.classes = os_sorted(self.classes)
+
+        # Write classes to file
+        for filename, bboxes in self.paintings.items():
+            # Convert class names to class indices based on the sorted classes list
+            for bbox in bboxes:
+                bbox['class'] = self.classes.index(bbox['class'])
+
+            self.write_bounding_boxes_to_file(bboxes, filename)
+
+        with open(os.path.join(os.path.dirname(self.file_path), 'classes.txt'), 'w+', encoding='UTF-8') as file:
+            file.writelines(f"{c}\n" for c in self.classes)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('file_path', type=str,
-                        help='File path to the PSD file or directory with PSD files.')
-    parser.add_argument('-o', '--output', type=str, default=None,
-                        help='Output folder for the generated text files.')
-    parser.add_argument('-f', '--force', action='store_true',
-                        help="Force the overwriting of existing files.")
+    parser.add_argument('file_path', type=str, help='Path to the PSD file or directory with PSD files.')
+    parser.add_argument('-o', '--output', type=str, default=None, help='Output folder for the generated text files.')
+    parser.add_argument('-f', '--force', action='store_true', help="Force the overwriting of existing files.")
     args = parser.parse_args()
 
     # PRETTY PRINT WELCOME MESSAGE & ARGUMENTS.
@@ -115,37 +132,12 @@ if __name__ == "__main__":
     print("".center(padding, "8"))
     print("\n\n")
 
-    # Check if output folder already exists
+    output_folder = args.output if args.output else os.path.dirname(args.file_path)
     if os.path.exists(output_folder):
-        if args.force:
-            print("Output folder already exists. Deleting folder...")
-            shutil.rmtree(output_folder)
-        else:
-            # If it exists and force is not set, exit
+        if not args.force:
             print("Output folder already exists. Please delete the folder or use the --force option.")
             exit()
+        shutil.rmtree(output_folder)
 
-    classes = []
-    
-    # Check if given path is a directory or a file
-    if os.path.isdir(file_path):
-        # If it's a directory, process all files in that directory
-        for filename in os.listdir(file_path):
-            if filename.endswith(".psd") or filename.endswith(".psb"):
-                print("Processing {}".format(filename))
-                c = process_psd_file(os.path.join(
-                    file_path, filename), output_folder)
-                classes.extend(c)
-    elif file_path.endswith(".psd") or file_path.endswith(".psb"):
-        # If it's a file, process the file
-        c = process_psd_file(file_path, output_folder)
-        classes.extend(c)
-    
-    # Remove duplicates and sort
-    classes = list(set(classes))
-    classes.sort()
-
-    # Write classes to file
-    with open(os.path.join(os.path.dirname(file_path), 'classes.txt'), 'w+', encoding='UTF-8') as file:
-        for c in classes:
-            file.write("{}\n".format(c))
+    print("Extracting bounding boxes...")
+    PSDProcessor(args.file_path, output_folder).process_files()
