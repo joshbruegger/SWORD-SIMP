@@ -93,9 +93,6 @@ def main():
             print("Dataset has already been separated. Use the -f flag to overwrite existing files.")
             exit()
 
-    # Move the classes.txt file to the output folder
-    shutil.move(os.path.join(args.location, "classes.txt"), os.path.join(output_dir, "classes.txt"))
-
     painting_classes = read_label_files(os.path.join(args.location, "labels"))
     most_shared = most_shared_classes(painting_classes)
     print(most_shared)
@@ -115,6 +112,30 @@ def main():
     os.makedirs(val_labels_dir, exist_ok=True)
     os.makedirs(test_images_dir, exist_ok=True)
     os.makedirs(test_labels_dir, exist_ok=True)
+
+    # read args.location/classes.txt and make a data.yaml file with the following structure:
+    # train: /path/to/train/images
+    # val: /path/to/val/images
+    # test: /path/to/test/images
+    # nc: [number of classes]
+    # names:
+    #   0 : class1name
+    #   1 : class2name
+    #   ...
+    #   [number of classes] : class[number of classes]name
+
+    with open(os.path.join(args.location, "classes.txt"), "r") as file:
+        classes = [line.strip() for line in file]
+
+    with open(os.path.join(output_dir, "data.yaml"), "w") as file:
+        # paths are relative to the data.yaml file
+        file.write(f"train: {os.path.relpath(train_images_dir, output_dir)}\n")
+        file.write(f"val: {os.path.relpath(val_images_dir, output_dir)}\n")
+        file.write(f"test: {os.path.relpath(test_images_dir, output_dir)}\n")
+        file.write(f"nc: {len(classes)}\n")
+        file.write("names:\n")
+        for i, class_name in enumerate(classes):
+            file.write(f"  {i}: {class_name}\n")
 
     # Moving the crops from the painting that shares the most classes with others to the test folder
     for filename in tqdm(os.listdir(os.path.join(args.location, "cropped", "images")), desc="Moving test images for test set"):
@@ -158,11 +179,6 @@ def main():
             shutil.move(os.path.join(args.location, 'cropped', 'labels', filename), os.path.join(train_labels_dir, filename))
         elif filename in validation_files:
             shutil.move(os.path.join(args.location, 'cropped', 'labels', filename), os.path.join(val_labels_dir, filename))
-
-    # Make a classes.txt file containing all the classes in the dataset line by line
-    with open(os.path.join(output_dir, "classes.txt"), "w") as file:
-        for class_name in painting_classes:
-            file.write(class_name + "\n")
 
 if __name__ == "__main__":
     main()
