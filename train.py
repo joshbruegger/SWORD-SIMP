@@ -42,7 +42,7 @@ class Config:
 
         with open(os.path.join(self.DATA_DIR, 'data.yaml'), 'r') as f:
             data = yaml.load(f, Loader=yaml.FullLoader)
-            self.CLASSES = list(data['names'].keys())
+            self.CLASSES = data['names']
         self.NUM_CLASSES = len(self.CLASSES)
 
         # Print out the configuration
@@ -57,7 +57,7 @@ class Config:
     #trainer params
     CHECKPOINT_DIR = 'checkpoints'
     EXPERIMENT_NAME = 'SWORDSIMP_YOLO_NAS'
-    
+
 
     #dataset params
     TRAIN_IMAGES_DIR = 'train/images' #child dir of DATA_DIR where train images are
@@ -109,8 +109,8 @@ def train(config):
     )
 
 
-    model = models.get(config.MODEL_NAME, 
-                    num_classes=config.NUM_CLASSES, 
+    model = models.get(config.MODEL_NAME,
+                    num_classes=config.NUM_CLASSES,
                     pretrained_weights=config.PRETRAINED_WEIGHTS
                     )
 
@@ -160,9 +160,9 @@ def train(config):
         }
     }
 
-    trainer.train(model=model, 
-                training_params=train_params, 
-                train_loader=train_data, 
+    trainer.train(model=model,
+                training_params=train_params,
+                train_loader=train_data,
                 valid_loader=val_data)
 
     best_model = models.get(config.MODEL_NAME,
@@ -171,15 +171,15 @@ def train(config):
 
     trainer.test(model=best_model,
                 test_loader=test_data,
-                test_metrics_list=DetectionMetrics_050(score_thres=0.1, 
-                                                    top_k_predictions=300, 
-                                                    num_cls=config.NUM_CLASSES, 
-                                                    normalize_targets=True, 
-                                                    post_prediction_callback=PPYoloEPostPredictionCallback(score_threshold=0.01, 
-                                                                                                            nms_top_k=1000, 
+                test_metrics_list=DetectionMetrics_050(score_thres=0.1,
+                                                    top_k_predictions=300,
+                                                    num_cls=config.NUM_CLASSES,
+                                                    normalize_targets=True,
+                                                    post_prediction_callback=PPYoloEPostPredictionCallback(score_threshold=0.01,
+                                                                                                            nms_top_k=1000,
                                                                                                             max_predictions=300,                                                                              nms_threshold=0.7)
                                                     ))
-    
+
 
 
 if __name__ == '__main__':

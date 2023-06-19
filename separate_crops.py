@@ -127,16 +127,6 @@ def main():
     with open(os.path.join(args.location, "classes.txt"), "r") as file:
         classes = [line.strip() for line in file]
 
-    with open(os.path.join(output_dir, "data.yaml"), "w") as file:
-        # paths are relative to the data.yaml file
-        file.write(f"train: {os.path.relpath(train_images_dir, output_dir)}\n")
-        file.write(f"val: {os.path.relpath(val_images_dir, output_dir)}\n")
-        file.write(f"test: {os.path.relpath(test_images_dir, output_dir)}\n")
-        file.write(f"nc: {len(classes)}\n")
-        file.write("names:\n")
-        for i, class_name in enumerate(classes):
-            file.write(f"  {i}: {class_name}\n")
-
     # Moving the crops from the painting that shares the most classes with others to the test folder
     for filename in tqdm(os.listdir(os.path.join(args.location, "cropped", "images")), desc="Moving test images for test set"):
         if most_shared[0][0] in filename:
@@ -157,6 +147,20 @@ def main():
                 all_classes.append(class_name)
                 all_files.append(label_file)
 
+    # remove classes that are not shared between the classes and all_classes lists
+    classes = [class_name for class_name in classes if class_name in all_classes]
+
+    # save the classes to a file
+    with open(os.path.join(output_dir, "data.yaml"), "w") as file:
+        # paths are relative to the data.yaml file
+        file.write(f"train: {os.path.relpath(train_images_dir, output_dir)}\n")
+        file.write(f"val: {os.path.relpath(val_images_dir, output_dir)}\n")
+        file.write(f"test: {os.path.relpath(test_images_dir, output_dir)}\n")
+        file.write(f"nc: {len(classes)}\n")
+        file.write("names:\n")
+        for i, class_name in enumerate(classes):
+            file.write(f"- '{class_name}'\n")
+
     # Use train_test_split to create training and validation sets
     # Try stratifying by class, if that doesn't work, don't stratify
     try:
@@ -164,7 +168,7 @@ def main():
     except ValueError:
         train_files, validation_files, _, _ = train_test_split(all_files, all_classes, test_size=0.2, random_state=420)
 
-    
+
     # analyze_distribution(train_files, validation_files, args) #! Uncomment this line to print the distribution of classes in the training and validation sets. Takes a long time to run.
 
     # Then move the images/labels to their respective folders based on the split
