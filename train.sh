@@ -33,6 +33,6 @@ SCRATCH=/scratch/$USER
 chmod +x $WORKDIR/setup_env.sh
 source $WORKDIR/setup_env.sh
 
-python3 train.py -d $SCRATCH/dataset -c $SCRATCH/dataset/classes.txt -e $e
+python3 -u train.py -d $SCRATCH/dataset -c $SCRATCH/dataset/classes.txt -e $e
 
 deactivate
