@@ -71,6 +71,16 @@ def main():
     parser.add_argument('--force', '-f', help="Force overwrite of existing files", action='store_true')
     args = parser.parse_args()
 
+    # PRETTY PRINT WELCOME MESSAGE & ARGUMENTS.
+    padding = 140
+    print("\n\n")
+    print(" SWORD-SIMP Dataset Separator ".center(padding, "8"))
+    print(f" Dataset location: {args.location} ".center(padding))
+    print(f" Output location: {args.output} ".center(padding))
+    print(f" Force overwrite: {args.force} ".center(padding))
+    print("".center(padding, "8"))
+    print("\n\n")
+
     output_dir = args.output
     if output_dir == "None":
         output_dir = os.path.join(args.location, "separated")

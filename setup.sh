@@ -49,14 +49,22 @@ while getopts ":dbcsen:" opt; do
     esac
 done
 
-# Print flags
-echo "Starting the job!"
-echo "Force download of database = $d"
-echo "Force generation of bboxes = $b"
-echo "Force generation of crops = $c"
-echo "Force generation of environment = $e"
-echo "Force separation of crops = $s"
-echo "Number of crops = $n"
+# Pretty print welcome message
+echo ""
+echo ""
+echo "88888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888"
+echo "SWORD-SIMP Dataset Preprocessor"
+echo "88888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888"
+echo "Dataset location: $SCRATCH/dataset/source"
+echo "Force download of database = $download"
+echo "Force generation of bboxes = $bboxes"
+echo "Force generation of crops = $crops"
+echo "Force generation of environment = $env"
+echo "Force separation of crops = $separate"
+echo "Number of crops = $numCrops"
+echo "88888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888"
+echo ""
+echo ""
 
 WORKDIR=$(pwd)
 SCRATCH=/scratch/$USER

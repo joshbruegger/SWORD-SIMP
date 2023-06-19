@@ -105,12 +105,15 @@ if __name__ == "__main__":
                         help="Force the overwriting of existing files.")
     args = parser.parse_args()
 
-    print("Extracting bounding boxes...")
-
-    file_path = args.file_path
-    output_folder = args.output
-    if output_folder is None:
-        output_folder = os.path.dirname(file_path)
+    # PRETTY PRINT WELCOME MESSAGE & ARGUMENTS.
+    padding = 140
+    print("\n\n")
+    print(" SWORD-SIMP Bounding Box Extraction Script ".center(padding, "8"))
+    print(f" File path: {args.file_path} ".center(padding))
+    print(f" Output folder: {args.output} ".center(padding))
+    print(f" Force overwrite: {args.force} ".center(padding))
+    print("".center(padding, "8"))
+    print("\n\n")
 
     # Check if output folder already exists
     if os.path.exists(output_folder):

@@ -188,6 +188,21 @@ if __name__ == '__main__':
         n_jobs = int(os.environ['SLURM_JOB_CPUS_PER_NODE'])
     else:
         n_jobs = 1
+        
+    # PRETTY PRINT WELCOME MESSAGE & ARGUMENTS.
+    padding = 140
+    print("\n\n")
+    print(" SWORD-SIMP Crop Generator ".center(padding, "8"))
+    print(f" Working directory: {args.dir} ".center(padding))
+    print(f" Number of crops per image: {args.n_crops} ".center(padding))
+    print(f" Minimum number of bounding boxes per crop: {args.min_crops} ".center(padding))
+    print(f" Minimum visibility for bounding boxes: {args.min_visibility} ".center(padding))
+    print(f" Force the removal of the existing 'cropped' directory if it exists: {args.force} ".center(padding))
+    print(f" File containing pre-generated crop coordinates: {args.crop_file} ".center(padding))
+    print(f" Number of processes to use for multiprocessing: {args.processes} ".center(padding))
+    print("".center(padding, "8"))
+    print("\n\n")
+
 
     augmenter = ImageCropper(
         args.dir, args.n_crops, args.min_crops, args.min_visibility, args.force, args.crop_file, n_jobs)

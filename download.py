@@ -10,7 +10,15 @@ if __name__ == '__main__':
                         help="Force the removal of the existing 'cropped' directory if it exists")
     args = parser.parse_args()
 
-    print("Downloading files...")
+    # PRETTY PRINT WELCOME MESSAGE & ARGUMENTS.
+    padding = 140
+    print("\n\n")
+    print(" SWORD-SIMP Dataset Downloader ".center(padding, "8"))
+    print(f" Output location: {args.output} ".center(padding))
+    print(f" Force overwrite: {args.force} ".center(padding))
+    print("".center(padding, "8"))
+    print("\n\n")
+    
 
     if os.path.exists(args.output):
         if args.force:

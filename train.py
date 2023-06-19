@@ -189,6 +189,17 @@ if __name__ == '__main__':
     parser.add_argument('--num_workers', '-w',type=int, default=1)
 
     args = parser.parse_args()
-    num_epochs = args.num_epochs
+
+    # PRETTY PRINT WELCOME MESSAGE & ARGUMENTS.
+    padding = 140
+    print("\n\n")
+    print(" SWORD-SIMP Train ".center(padding, "8"))
+    print(f" Data dir: {args.dir} ".center(padding, "8"))
+    print(f" Classes: {args.classes} ".center(padding, "8"))
+    print(f" Epochs: {args.num_epochs}" .center(padding, "8"))
+    print(f" Batch size: {args.batch_size} ".center(padding, "8"))
+    print(f" Num workers: {args.num_workers} ".center(padding, "8"))
+    print("\n\n")
+
     Config = Config(args)
     train(Config)
