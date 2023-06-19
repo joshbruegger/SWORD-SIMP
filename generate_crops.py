@@ -179,8 +179,7 @@ def get_args():
 if __name__ == '__main__':
     
     args = get_args()
-    print('Generating crops...')
-
+    
     # if the processes flag has been set, use that number of processes. otherwise, see if int(os.environ['SLURM_JOB_CPUS_PER_NODE']) is set, and use that number of processes. otherwise, use just 1 process.
     if args.processes:
         n_jobs = args.processes
