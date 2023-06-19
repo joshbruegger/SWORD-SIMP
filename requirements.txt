@@ -11,3 +11,4 @@ wandb
 scikit-learn
 tqdm
 natsort
+pyyaml

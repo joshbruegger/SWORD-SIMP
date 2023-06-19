@@ -4,6 +4,7 @@
 import os
 import argparse
 import wandb
+import yaml
 
 import requests
 import torch
@@ -38,9 +39,10 @@ class Config:
         'batch_size':args.batch_size,
         'num_workers':args.num_workers,
         }
-        with open(args.classes, 'r') as f:
-            for line in f:
-                self.CLASSES.append(line.strip())
+
+        with open(os.path.join(self.DATA_DIR, 'data.yaml'), 'r') as f:
+            data = yaml.load(f, Loader=yaml.FullLoader)
+            self.CLASSES = list(data['names'].keys())
         self.NUM_CLASSES = len(self.CLASSES)
 
         # Print out the configuration
@@ -61,8 +63,8 @@ class Config:
     TRAIN_IMAGES_DIR = 'train/images' #child dir of DATA_DIR where train images are
     TRAIN_LABELS_DIR = 'train/labels' #child dir of DATA_DIR where train labels are
 
-    VAL_IMAGES_DIR = 'val/images' #child dir of DATA_DIR where validation images are
-    VAL_LABELS_DIR = 'val/labels' #child dir of DATA_DIR where validation labels are
+    VAL_IMAGES_DIR = 'valid/images' #child dir of DATA_DIR where validation images are
+    VAL_LABELS_DIR = 'valid/labels' #child dir of DATA_DIR where validation labels are
 
     # if you have a test set
     TEST_IMAGES_DIR = 'test/images' #child dir of DATA_DIR where test images are
