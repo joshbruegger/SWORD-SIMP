@@ -14,33 +14,36 @@
 
 # Help function
 function usage {
-    echo "Usage: $0 [-d] [-b] [-c] [-e] [-s] [-n <number>]"
+    echo "Usage: $0 [-d] [-b] [-c] [-e] [-s] [-P] [-n <number>]"
     echo "  -d: force download of dataset"
     echo "  -b: force generation of bboxes"
     echo "  -c: force generation of crops"
     echo "  -e: force generation of environment"
     echo "  -s: force separation of crops in train/val/test sets"
+    echo "  -P: force ALL preprocessing steps"
     echo "  -n <number>: number of crops to generate (default = 50)"
     echo "  combination of flags is possible (e.g. -bc), except for -n"
     exit 1
 }
 
 # Process flags
-d=""
-b=""
-c=""
-s=""
-e=false
-n=50
-while getopts ":dbcsen:" opt; do
+download=""
+bboxes=""
+crops=""
+separate=""
+env=false
+preprocessAll=false
+numCrops=50
+while getopts ":dbcsPen:" opt; do
     case $opt in
-        d) d="-f";;
-        b) b="-f";;
-        c) c="-f";;
-        s) s="-f";;
-        e) e=true;;
-        n) n="$OPTARG"
-            if ! [[ "$n" =~ ^[0-9]+$ ]] ; then
+        d) download="-f";;
+        b) bboxes="-f";;
+        c) crops="-f";;
+        s) separate="-f";;
+        e) env=true;;
+        P) preprocessAll=true;;
+        n) numCrops="$OPTARG"
+            if ! [[ "$numCrops" =~ ^[0-9]+$ ]] ; then
                 echo "error: -n argument is not a number" >&2
                 usage
             fi;;
@@ -48,6 +51,13 @@ while getopts ":dbcsen:" opt; do
             usage;;
     esac
 done
+
+# If P flag is set, set all flags
+if [ "$preprocessAll" = true ] ; then
+    bboxes="-f"
+    crops="-f"
+    separate="-f"
+fi
 
 # Pretty print welcome message
 echo ""
@@ -70,7 +80,7 @@ WORKDIR=$(pwd)
 SCRATCH=/scratch/$USER
 
 # If e flag is set, delete the virtual environment if it exists
-if [ "$e" = true ] ; then
+if [ "$env" = true ] ; then
     if [ -d "$HOME/.envs/thesis_env" ] ; then
         echo "Deleting virtual environment..."
         rm -rf $HOME/.envs/thesis_env
@@ -81,14 +91,16 @@ fi
 chmod +x $WORKDIR/setup_env.sh
 source $WORKDIR/setup_env.sh
 
-# download dataset using the download script in work dir (force if flag is set)
-python3 -u $WORKDIR/download.py $SCRATCH/dataset/source/images $d
+# download dataset using the download script in work dir (force if flag is set), if it fails exit
+python3 -u $WORKDIR/download.py $SCRATCH/dataset/source/images $download || exit
 
-# generate the bboxes (force if flag is set)
-python3 -u $WORKDIR/extract_bboxes.py $SCRATCH/dataset/source/images -o $SCRATCH/dataset/source/labels $b
+# generate the bboxes (force if flag is set), if it fails exit
+python3 -u $WORKDIR/extract_bboxes.py $SCRATCH/dataset/source/images -o $SCRATCH/dataset/source/labels $bboxes || exit
 
-# generate crops (force if flag is set)
-python3 -u $WORKDIR/generate_crops.py $SCRATCH/dataset/source/ $n $c
-python3 -u $WORKDIR/separate_crops.py $SCRATCH/dataset/source/ -o $SCRATCH/dataset/ $s
+# generate crops (force if flag is set), if it fails exit
+python3 -u $WORKDIR/generate_crops.py $SCRATCH/dataset/source/ $numCrops $crops || exit
+
+# separate crops in train/val/test sets (force if flag is set), if it fails exit
+python3 -u $WORKDIR/separate_crops.py $SCRATCH/dataset/source/ -o $SCRATCH/dataset/ $separate || exit
 
 deactivate
