@@ -2,25 +2,28 @@ import os
 from collections import defaultdict
 from tqdm import tqdm
 import argparse
+from natsort import os_sorted
 import shutil
+import pandas as pd
 from sklearn.model_selection import train_test_split
+import logging
+from pathlib import Path
 
-def read_label_files(folder):
+# Set up logger
+logging.basicConfig(level=logging.INFO)
+
+def read_label_files(folder: Path):
+    """Read labels from files and return a dictionary with classes and counts per file."""
+    txt_files = [f for f in folder.iterdir() if f.suffix == ".txt" and "_classes" not in f.stem]
+    
     classes = defaultdict(lambda: defaultdict(int))
-    txt_files = [
-        f
-        for f in os.listdir(folder)
-        if f.endswith(".txt") and not f.endswith("_classes.txt")
-    ]
-
-    for i, filename in enumerate(tqdm(txt_files, desc="Reading files")):
-        with open(os.path.join(folder, filename), "r") as file:
-            filename = filename.split(".")[0]
-            print(f"Reading file {i+1}/{len(txt_files)}: {filename}")
-            for line in file:
+    for file in tqdm(txt_files, desc="Reading files"):
+        with file.open() as f:
+            for line in f:
                 class_name = line.strip().split()[0]
-                classes[class_name][filename] += 1
-    return classes
+                classes[class_name][file.stem] += 1
+
+    return classes, txt_files
 
 def most_shared_classes(classes):
     # ignore classes that only appear in one painting
@@ -64,14 +67,60 @@ def analyze_distribution(train_files, validation_files, args):
     for i in range(len(train_classes)):
         print(train_classes[i][0].ljust(20) + f"{round(train_classes[i][1] / total_train * 100, 2)}%".ljust(20) + f"{round(validation_classes[i][1] / total_validation * 100, 2)}%".ljust(20))
 
-def main():
+def move_files(files: list, src_folder: Path, dest_folder: Path):
+    """Move files from the source to the destination folder."""
+    for file in tqdm(files["file"], desc=f"Moving {len(files)} files to {dest_folder}"):
+        src_file = src_folder / file
+        if src_file.exists():
+            shutil.move(str(src_file), str(dest_folder))
+
+def split_train_valid_test_files(label_files : list, test_file: str):
+    test_files = []
+
+    df_file_classes = pd.DataFrame(columns=["file", "classes"]) # dataframe with the file name and a list of classes in that file
+    class_counts = {}
+    tot_classes = 0
+
+    for label_file in tqdm(label_files, desc="Creating list of classes"):\
+    
+        if test_file in label_file.stem:
+            test_files.append(label_file)
+            continue
+
+        classes_in_file = []
+        with label_file.open() as file:
+            for line in file:
+                class_name = line.strip().split()[0]
+                classes_in_file.append(class_name)
+                tot_classes += 1
+                if class_name in class_counts:
+                    class_counts[class_name] += 1
+                else:
+                    class_counts[class_name] = 1
+        
+        df_file_classes = pd.concat([df_file_classes, pd.DataFrame({"file": [label_file], "classes": [classes_in_file]})])
+
+    # Check if there are any classes that only appear in one file
+    classes_in_one_file = []
+    for class_name, count in class_counts.items():
+        if count == 1:
+            classes_in_one_file.append(class_name)
+    if len(classes_in_one_file) > 0:
+        print(f"WARNING: {len(classes_in_one_file)} classes only appear in one file")
+        print(classes_in_one_file)
+
+    train_files, validation_files = train_test_split(df_file_classes, test_size=0.20, random_state=42, stratify=df_file_classes["classes"])
+
+    return train_files, validation_files, test_files
+
+def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("location", help="Location of the dataset")
-    parser.add_argument("--output", '-o', help="Location to save the separated dataset", default="None")
+    parser.add_argument("--output", '-o', help="Location to save the separated dataset", default=None)
     parser.add_argument('--force', '-f', help="Force overwrite of existing files", action='store_true')
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    # PRETTY PRINT WELCOME MESSAGE & ARGUMENTS.
+def print_welcome(args):
     padding = 140
     print("\n\n")
     print(" SWORD-SIMP Dataset Separator ".center(padding, "8"))
@@ -81,108 +130,49 @@ def main():
     print("".center(padding, "8"))
     print("\n\n")
 
-    output_dir = args.output
-    if output_dir == "None":
-        output_dir = os.path.join(args.location, "separated")
+def main():
+    args = get_args()
+    print_welcome(args)
 
-    # Check if the dataset has already been separated
-    if os.path.exists(output_dir):
-        if args.force:
-            print("Overwriting existing files")
-        else:
-            print("Dataset has already been separated. Use the -f flag to overwrite existing files.")
-            exit()
+    dataset_dir = Path(args.location)
+    output_dir = Path(args.output) if args.output else dataset_dir / "separated"
 
-    painting_classes = read_label_files(os.path.join(args.location, "labels"))
+    if output_dir.exists() and not args.force:
+        logging.error("Dataset has already been separated. Use the -f flag to overwrite existing files.")
+        return
+    
+    painting_classes, label_files = read_label_files(dataset_dir / "cropped" / "labels")
     most_shared = most_shared_classes(painting_classes)
-    print(most_shared)
     print(f"Painting that shares the most classes with others: {most_shared[0][0]} ({most_shared[0][1]} classes)")
 
-    train_images_dir = os.path.join(output_dir, "train", "images")
-    train_labels_dir = os.path.join(output_dir, "train", "labels")
-    val_images_dir = os.path.join(output_dir, "valid", "images")
-    val_labels_dir = os.path.join(output_dir, "valid", "labels")
-    test_images_dir = os.path.join(output_dir, "test", "images")
-    test_labels_dir = os.path.join(output_dir, "test", "labels")
+    train_files, validation_files, test_files = split_train_valid_test_files(label_files, most_shared[0][0])
 
-    # Create the folders if they don't exist
-    os.makedirs(train_images_dir, exist_ok=True)
-    os.makedirs(train_labels_dir, exist_ok=True)
-    os.makedirs(val_images_dir, exist_ok=True)
-    os.makedirs(val_labels_dir, exist_ok=True)
-    os.makedirs(test_images_dir, exist_ok=True)
-    os.makedirs(test_labels_dir, exist_ok=True)
+    exit()
 
-    # read args.location/classes.txt and make a data.yaml file with the following structure:
-    # train: /path/to/train/images
-    # val: /path/to/val/images
-    # test: /path/to/test/images
-    # nc: [number of classes]
-    # names:
-    #   0 : class1name
-    #   1 : class2name
-    #   ...
-    #   [number of classes] : class[number of classes]name
+    # Create output directories
+    for split in ["train", "valid", "test"]:
+        for folder in ["images", "labels"]:
+            os.makedirs(output_dir / split / folder, exist_ok=True)
 
-    with open(os.path.join(args.location, "classes.txt"), "r") as file:
+    # Move files
+    move_files(train_files, dataset_dir / "cropped" / "images", output_dir / "train" / "images")
+    move_files(train_files, dataset_dir / "cropped" / "labels", output_dir / "train" / "labels")
+    move_files(validation_files, dataset_dir / "cropped" / "images", output_dir / "valid" / "images")
+    move_files(validation_files, dataset_dir / "cropped" / "labels", output_dir / "valid" / "labels")
+    move_files(test_files, dataset_dir / "cropped" / "images", output_dir / "test" / "images")
+    move_files(test_files, dataset_dir / "cropped" / "labels", output_dir / "test" / "labels")
+
+    # save yaml file
+    with open(dataset_dir / "classes.txt", "r") as file:
         classes = [line.strip() for line in file]
-
-    # Moving the crops from the painting that shares the most classes with others to the test folder
-    for filename in tqdm(os.listdir(os.path.join(args.location, "cropped", "images")), desc="Moving test images for test set"):
-        if most_shared[0][0] in filename:
-            shutil.move(os.path.join(args.location, 'cropped', 'images', filename), os.path.join(test_images_dir, filename))
-    for filename in tqdm(os.listdir(os.path.join(args.location, "cropped", "labels")), desc="Moving labels for test set"):
-        if most_shared[0][0] in filename:
-            shutil.move(os.path.join(args.location, 'cropped', 'labels', filename), os.path.join(test_labels_dir, filename))
-
-    # Make a list of all classes and paintings
-    all_classes = []
-    all_files = []
-    label_files = [f for f in os.listdir(os.path.join(args.location, "cropped", "labels")) if f.endswith(".txt") and not f.endswith("_classes.txt") and most_shared[0][0] not in f]
-
-    for label_file in tqdm(label_files, desc="Creating list of classes"):
-        with open(os.path.join(args.location, "cropped", "labels", label_file), "r") as file:
-            for line in file:
-                class_name = line.strip().split()[0]
-                all_classes.append(class_name)
-                all_files.append(label_file)
-
-    # only take the classes[] with the indices in all_classes[]
-    classes = [classes[i] for i in range(len(classes)) if i in all_classes]
-
-    # save the classes to a file
-    with open(os.path.join(output_dir, "data.yaml"), "w") as file:
-        # paths are relative to the data.yaml file
-        file.write(f"train: {os.path.relpath(train_images_dir, output_dir)}\n")
-        file.write(f"val: {os.path.relpath(val_images_dir, output_dir)}\n")
-        file.write(f"test: {os.path.relpath(test_images_dir, output_dir)}\n")
+    with open(dataset_dir / "data.yaml", "w") as file:
+        file.write(f"train: {os.path.join('train', 'images')}\n")
+        file.write(f"val: {os.path.join('valid', 'images')}\n")
+        file.write(f"test: {os.path.join('test', 'images')}\n")
         file.write(f"nc: {len(classes)}\n")
         file.write("names:\n")
-        for i, class_name in enumerate(classes):
+        for class_name in classes:
             file.write(f"- '{class_name}'\n")
-
-    # Use train_test_split to create training and validation sets
-    # Try stratifying by class, if that doesn't work, don't stratify
-    try:
-        train_files, validation_files, _, _ = train_test_split(all_files, all_classes, test_size=0.2, stratify=all_classes, random_state=420)
-    except ValueError:
-        train_files, validation_files, _, _ = train_test_split(all_files, all_classes, test_size=0.2, random_state=420)
-
-
-    # analyze_distribution(train_files, validation_files, args) #! Uncomment this line to print the distribution of classes in the training and validation sets. Takes a long time to run.
-
-    # Then move the images/labels to their respective folders based on the split
-    for filename in tqdm(os.listdir(os.path.join(args.location, "cropped", "images")), desc="Moving images for training and validation sets"):
-        if filename.replace(".jpg", ".txt") in train_files:
-            shutil.move(os.path.join(args.location, 'cropped', 'images', filename), os.path.join(train_images_dir, filename))
-        elif filename.replace(".jpg", ".txt") in validation_files:
-            shutil.move(os.path.join(args.location, 'cropped', 'images', filename), os.path.join(val_images_dir, filename))
-
-    for filename in tqdm(os.listdir(os.path.join(args.location, "cropped", "labels")), desc="Moving labels for training and validation sets"):
-        if filename in train_files:
-            shutil.move(os.path.join(args.location, 'cropped', 'labels', filename), os.path.join(train_labels_dir, filename))
-        elif filename in validation_files:
-            shutil.move(os.path.join(args.location, 'cropped', 'labels', filename), os.path.join(val_labels_dir, filename))
 
 if __name__ == "__main__":
     main()
