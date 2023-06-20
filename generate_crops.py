@@ -4,11 +4,11 @@ import time
 import os
 import gc
 import shutil
-from joblib import Parallel, delayed
 import numpy as np
 import albumentations as A
 from pathlib import Path
 from psd_tools import PSDImage
+from tqdm import tqdm
 
 
 class ImageCropper:
@@ -86,11 +86,11 @@ class ImageCropper:
                     f.write(' '.join(map(str, [label] + list(box))) + '\n')
 
     def generate_crops(self, image, bboxes, labels, history, filename):
-        print(f'Generating crops for {filename.stem}')
 
         crops, crop_bboxes, crop_labels = [], [], []
 
         if self.crop_file:
+            tqdm.write(f'Regenerating crops for {filename.stem}')
             print("Regenerating crops for", filename.stem)
             if filename.stem in self.to_regenerate:
                 for crop_coordinates in self.to_regenerate[filename.stem]:
@@ -103,23 +103,29 @@ class ImageCropper:
                     history.append([filename.stem] + crop_coordinates)
             else:
                 raise RuntimeError("No crop coordinates found for image")
+            
+            return crops, crop_bboxes, crop_labels
+        
 
+        pbar = tqdm(total=self.n_crops, desc=f'Generating crops for {filename.stem}')
         while len(crops) < self.n_crops:
             crop_coordinates = self.generate_random_crop_coordinates(
                 image.shape[1], image.shape[0])
             transform = self.get_augmentation(crop_coordinates)
             augmented = transform(image=image, bboxes=bboxes, labels=labels)
             if len(augmented['bboxes']) >= self.min_crops:
+                pbar.update(1)
                 crops.append(augmented['image'])
                 crop_bboxes.append(augmented['bboxes'])
                 crop_labels.append(augmented['labels'])
                 history.append([filename.stem] + list(crop_coordinates))
+        pbar.close()
 
         return crops, crop_bboxes, crop_labels
 
     def process_image(self, filename):
-        start_time = time.time()
-        print(f'Processing {filename}')
+        # start_time = time.time()
+        # print(f'Processing {filename}')
         
         if filename.suffix not in ['.psb', '.psd', '.jpg', '.png']:
             print(f'Unsupported file format: {filename}')
@@ -145,17 +151,19 @@ class ImageCropper:
         self.save_crops_and_labels(
             crops, crop_bboxes, crop_labels, filename)
 
-        print(f'Processed {filename.stem} in {time.time() - start_time:.2f}s')
+        # print(f'Processed {filename.stem} in {time.time() - start_time:.2f}s')
         return history
 
     def process_images(self):
         print(f'Processing images using {self.processes} processes')
 
-        histories = Parallel(n_jobs=self.processes)(delayed(self.process_image)(
-            filename) for filename in self.images_dir.iterdir())
+        # histories = Parallel(n_jobs=self.processes)(delayed(self.process_image)(
+        #     filename) for filename in tqdm(self.images_dir.iterdir(), desc='Processing images'))
+
+        histories = [self.process_image(filename) for filename in tqdm(self.images_dir.iterdir(), desc='Processing images')]
 
         with open(self.augmented_folder / 'crops.txt', 'a') as crops_txt:
-            for history in histories:
+            for history in tqdm(histories, desc='Writing crop history'):
                 crops_txt.write('\n'.join([' '.join(map(str, crop)) for crop in history]))
                 crops_txt.write('\n')
 
