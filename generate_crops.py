@@ -124,9 +124,7 @@ class ImageCropper:
         return crops, crop_bboxes, crop_labels
 
     def process_image(self, filename):
-        # start_time = time.time()
-        # print(f'Processing {filename}')
-        
+
         if filename.suffix not in ['.psb', '.psd', '.jpg', '.png']:
             print(f'Unsupported file format: {filename}')
             return []
