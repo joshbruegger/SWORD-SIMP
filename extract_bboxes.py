@@ -6,13 +6,14 @@ from psd_tools import PSDImage
 from natsort import os_sorted
 
 class PSDProcessor:
-    __slots__ = ['file_path', 'output_folder', 'classes', 'paintings']
+    __slots__ = ['file_path', 'output_folder', 'classes', 'paintings', 'painting_sizes']
 
     def __init__(self, file_path, output_folder):
         self.file_path = file_path
         self.output_folder = output_folder
         self.classes = set()
         self.paintings = {} # Dictionary with filename as key and list of bounding boxes as value
+        self.painting_sizes = {} # Dictionary with filename as key and [width, height] as value
 
         os.makedirs(self.output_folder, exist_ok=True) # Create output folder if it doesn't exist
 
@@ -86,6 +87,7 @@ class PSDProcessor:
         bboxes = []
         self.process_layers(psd, bboxes,  None)
         self.paintings[filename] = bboxes
+        self.painting_sizes[filename] = psd.size
 
         del psd
         gc.collect()
@@ -96,11 +98,6 @@ class PSDProcessor:
             if filename.endswith((".psd", ".psb")): # Only process PSD files
                 self.process_psd_file(os.path.join(self.file_path, filename))
         
-        # Sort classes alphabetically, sorting the numbers as numbers
-        # e.g. a1, a2, a10 instead of a1, a10, a2
-        # or a_1, a_2, a_10 instead of a_1, a_10, a_2 etc.
-        # This is done to ensure that the class indices are consistent across all files
-        # self.classes = sorted(self.classes, key=lambda x: [int(c) if c.isdigit() else c for c in re.split('(\d+)', x)])
         self.classes = os_sorted(self.classes)
 
         # Write classes to file
@@ -113,6 +110,10 @@ class PSDProcessor:
 
         with open(os.path.join(os.path.dirname(self.file_path), 'classes.txt'), 'w+', encoding='UTF-8') as file:
             file.writelines(f"{c}\n" for c in self.classes)
+
+        with open(os.path.join(os.path.dirname(self.file_path), 'painting_sizes.txt'), 'w+', encoding='UTF-8') as file:
+            for filename, size in self.painting_sizes.items():
+                file.write(f"{os.path.basename(filename).split('.')[0]} {size[0]} {size[1]}\n")
 
 
 if __name__ == "__main__":
