@@ -122,7 +122,7 @@ def train(config):
         "initial_lr": 5e-4,
         "lr_mode": "cosine",
         "cosine_final_lr_ratio": 0.1,
-        "optimizer": "Adam",
+        "optimizer": "Adam", # Maybe use Radam torch.optim.RAdam
         "optimizer_params": {"weight_decay": 0.0001},
         "zero_weight_decay_on_bias_and_bn": True,
         "ema": True,
