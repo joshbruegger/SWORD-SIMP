@@ -258,7 +258,7 @@ def main():
             if path.exists():
                 if not args.force:
                     logging.error(f"Output directory {path} already exists. Use -f to force overwrite.")
-                    exit(1)
+                    exit()
                 logging.warning(f"Output directory {path} already exists. Overwriting.")
                 shutil.rmtree(path)
 
