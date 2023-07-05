@@ -140,5 +140,4 @@ if __name__ == "__main__":
             exit()
         shutil.rmtree(output_folder)
 
-    print("Extracting bounding boxes...")
     PSDProcessor(args.file_path, output_folder).process_files()
