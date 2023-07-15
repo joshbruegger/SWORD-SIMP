@@ -3,7 +3,7 @@
 #SBATCH --output=setup-%j.log
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=200G
-#SBATCH --time=01:00:00
+#SBATCH --time=05:00:00
 
 # Accept flags from the command line:
 # -d: force download of dataset
