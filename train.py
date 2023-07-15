@@ -40,7 +40,7 @@ class Config:
         'num_workers':args.num_workers,
         }
 
-        with open(os.path.join(self.DATA_DIR, 'data.yaml'), 'r') as f:
+        with open(os.path.join(self.DATA_DIR, 'dataset.yaml'), 'r') as f:
             data = yaml.load(f, Loader=yaml.FullLoader)
             self.CLASSES = data['names']
         self.NUM_CLASSES = len(self.CLASSES)
@@ -108,11 +108,17 @@ def train(config):
         dataloader_params=config.DATALOADER_PARAMS
     )
 
-
-    model = models.get(config.MODEL_NAME,
-                    num_classes=config.NUM_CLASSES,
-                    pretrained_weights=config.PRETRAINED_WEIGHTS
-                    )
+    # if there's a checkpoint ckpt_best.pth in the checkpoint directory, then load it, otherwise load the pretrained weights
+    if os.path.exists(os.path.join(config.CHECKPOINT_DIR, config.EXPERIMENT_NAME, 'ckpt_best.pth')):
+        model = models.get(config.MODEL_NAME,
+                            num_classes=config.NUM_CLASSES,
+                            checkpoint_path=os.path.join(config.CHECKPOINT_DIR, config.EXPERIMENT_NAME, 'ckpt_best.pth')
+                            )
+    else:
+        model = models.get(config.MODEL_NAME,
+                        num_classes=config.NUM_CLASSES,
+                        pretrained_weights=config.PRETRAINED_WEIGHTS
+                        )
 
     train_params = {
         "average_best_models":True,
