@@ -2,7 +2,7 @@
 #SBATCH --gpus-per-node=a100:1
 #SBATCH --job-name=thesis_train
 #SBATCH --output=train-%j.log
-#SBATCH --time=03:30:00
+#SBATCH --time=04:00:00
 #SBATCH --mem=10G
 
 # Help function
