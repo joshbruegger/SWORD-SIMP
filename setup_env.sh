@@ -18,27 +18,36 @@ module load Boost/1.79.0-GCC-11.3.0
 
 module list
 
-just_created=false
-# Check if the virtual environment exists
-if [ ! -d "$HOME/.envs/thesis_env" ]; then
-    echo "Creating virtual environment..."
-    # Create the virtual environment
-    python3 -m venv $HOME/.envs/thesis_env
-    just_created=true
-fi
+export PATH=/home4/s4361687/.local/bin:$PATH
+
+echo "Installing packages..."
+pdm install --venv
+
+echo "Installed packages:"
+pdm list
+
+# just_created=false
+# # Check if the virtual environment exists
+# if [ ! -d "$HOME/.envs/thesis_env" ]; then
+#     echo "Creating virtual environment..."
+#     # Create the virtual environment
+#     python3 -m venv $HOME/.envs/thesis_env
+#     just_created=true
+# fi
 
 # Activate the virtual environment
 echo "Activating virtual environment..."
-source $HOME/.envs/thesis_env/bin/activate
+eval $(pdm venv activate)
+# source $HOME/.envs/thesis_env/bin/activate
 
-# make sure the requirements are installed
-echo "Installing requirements..."
-if [ "$just_created" = true ] ; then
-    pip3 install --upgrade pip
-    pip3 install --upgrade wheel
-    pip3 install -v --no-cache-dir -r ./requirements.txt
-fi
+# # make sure the requirements are installed
+# echo "Installing requirements..."
+# if [ "$just_created" = true ] ; then
+#     pip3 install --upgrade pip
+#     pip3 install --upgrade wheel
+#     pip3 install -v --no-cache-dir -r ./requirements.txt
+# fi
 
 # Print the list of installed packages
-echo "Installed packages:"
-pip list
+# echo "Installed packages:"
+# pip list
