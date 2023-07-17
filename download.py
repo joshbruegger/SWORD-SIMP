@@ -3,11 +3,15 @@ import os
 import argparse
 import shutil
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('output', help='Download directory')
-    parser.add_argument('-f', '--force', action='store_true',
-                        help="Force the removal of the existing 'cropped' directory if it exists")
+    parser.add_argument("output", help="Download directory")
+    parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Force the removal of the existing 'cropped' directory if it exists",
+    )
     args = parser.parse_args()
 
     # PRETTY PRINT WELCOME MESSAGE & ARGUMENTS.
@@ -18,7 +22,6 @@ if __name__ == '__main__':
     print(f" Force overwrite: {args.force} ".center(padding))
     print("".center(padding, "8"))
     print("\n\n")
-    
 
     if os.path.exists(args.output):
         if args.force:
@@ -28,5 +31,4 @@ if __name__ == '__main__':
             exit()
 
     url = "https://drive.google.com/drive/folders/1Ouga4ms22NK-sDUkI4MoFqHuhxG2qG1i"
-    gdown.download_folder(url, use_cookies=False,
-                          output=args.output, quiet=False)
+    gdown.download_folder(url, use_cookies=False, output=args.output, quiet=False)
