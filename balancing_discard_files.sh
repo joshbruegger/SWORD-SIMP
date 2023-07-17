@@ -7,4 +7,4 @@
 module purge
 module load Python/3.10.4-GCCcore-11.3.0
 
-python -u balancing_discard_files.py balancing_to_discard_out.txt
+python -u balancing_discard_files.py balancing_analyze_to_discard_out.txt
