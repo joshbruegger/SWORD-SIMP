@@ -7,14 +7,14 @@
 
 # Help function
 function usage {
-    echo "Usage: $0 [-e <number>]"po
+    echo "Usage: $0 [-e <number>]"
     echo "  -e <number>: number of epochs (default = 10)"
     echo "  -b <number>: batch size (default = 32)"
     exit 1
 }
 
 # Process flags
-e=1
+e=100
 b=32
 echo "Epochs: $e"
 echo "Batch size: $b"
@@ -26,6 +26,6 @@ SCRATCH=/scratch/$USER
 chmod +x $WORKDIR/setup_env.sh
 source $WORKDIR/setup_env.sh
 
-python3 -u train.py -d $SCRATCH/dataset -c $SCRATCH/dataset/classes.txt -e $e -b $b
+python3 -u train.py -d $SCRATCH/dataset -e $e -b $b
 
 deactivate
