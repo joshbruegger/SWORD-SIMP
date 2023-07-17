@@ -15,7 +15,8 @@ from pathlib import Path
 # Set up logger
 logging.basicConfig(level=logging.INFO)
 
-def read_label_files(folder: Path, crops : pd.DataFrame):
+
+def read_label_files(folder: Path, crops: pd.DataFrame):
     """
     Read labels from files and return a dictionary with classes and counts per file.
     Returns a dictionary with class names as keys and a dictionary with filenames and counts as values.
@@ -23,7 +24,9 @@ def read_label_files(folder: Path, crops : pd.DataFrame):
     filename_classes = pd.DataFrame(columns=["filename", "classes"])
     files = []
     classes = defaultdict(lambda: defaultdict(int))
-    for file in tqdm(folder.iterdir(), desc="Reading files", total=len(list(folder.iterdir()))):
+    for file in tqdm(
+        folder.iterdir(), desc="Reading files", total=len(list(folder.iterdir()))
+    ):
         if file.suffix != ".txt" or "_classes" in file.stem:
             continue
         files.append(file)
@@ -33,13 +36,17 @@ def read_label_files(folder: Path, crops : pd.DataFrame):
                 class_name = line.strip().split()[0]
                 classes_in_file.append(class_name)
                 classes[class_name]["_".join(file.stem.split("_")[:-1])] += 1
-        
+
         # add a new row to filename_classes
-        filename_classes = pd.concat([filename_classes, pd.DataFrame({"filename": [file.stem], "classes": [classes_in_file]})])
+        filename_classes = pd.concat([
+            filename_classes,
+            pd.DataFrame({"filename": [file.stem], "classes": [classes_in_file]}),
+        ])
 
     return classes, crops.merge(filename_classes, on="filename")
 
-def read_crops_location(file : Path):
+
+def read_crops_location(file: Path):
     """
     Read the crop location from a file.
     The file should contain one line per crop, with the following format:
@@ -62,11 +69,19 @@ def read_crops_location(file : Path):
             dimension = max(x_max - x_min, y_max - y_min)
             max_dimension = max(max_dimension, dimension)
 
-            df = pd.concat([df, pd.DataFrame({"filename": [filename], "paintingName": painting, "location": [line[1:]]})])
+            df = pd.concat([
+                df,
+                pd.DataFrame({
+                    "filename": [filename],
+                    "paintingName": painting,
+                    "location": [line[1:]],
+                }),
+            ])
 
     return df, max_dimension
 
-def read_painting_sizes(file : Path):
+
+def read_painting_sizes(file: Path):
     """
     Read the painting sizes from a file.
     The file should contain one line per painting, with the following format:
@@ -79,52 +94,65 @@ def read_painting_sizes(file : Path):
             line = line.strip().split()
             name = line[0]
             width, height = [int(x) for x in line[1:]]
-            df = pd.concat([df, pd.DataFrame({"paintingName": [name], "width": [width], "height": [height]})])
+            df = pd.concat([
+                df,
+                pd.DataFrame(
+                    {"paintingName": [name], "width": [width], "height": [height]}
+                ),
+            ])
 
     return df
 
-def find_test_painting(classes):
-    # ignore classes that only appear in one painting
-    most_shared = defaultdict(int)
-    for class_name, paintings in tqdm(classes.items(), desc="Finding most shared classes"):
-        # continue if class only appears in one painting
-        if len(paintings) == 1:
-            # print(f"Skipping {class_name} because it only appears in one painting, namely {list(paintings.keys())[0]}")
-            continue
-        for painting_name, count in paintings.items():
-            most_shared[painting_name] += 1
 
-    # sort by number of shared classes
-    most_shared = sorted(most_shared.items(), key=lambda x: x[1], reverse=True)
-    return most_shared
-
-def move_files(files: pd.DataFrame, label_dir: Path, image_dir : Path, label_dest_dir :Path,  image_dest_dir: Path, name = "files"):
+def move_files(
+    files: pd.DataFrame,
+    label_dir: Path,
+    image_dir: Path,
+    label_dest_dir: Path,
+    image_dest_dir: Path,
+    name="files",
+):
     """Move files mathcing the "filename" column in the files dataframe from the label_dir and image_dir to the label_dest_dir and image_dest_dir respectively."""
     for _, row in tqdm(files.iterrows(), desc=f"Moving {name}", total=len(files)):
-        shutil.move(label_dir / f"{row['filename']}.txt", label_dest_dir / f"{row['filename']}.txt")
-        shutil.move(image_dir / f"{row['filename']}.jpg", image_dest_dir / f"{row['filename']}.jpg")
-    
-    
+        shutil.move(
+            label_dir / f"{row['filename']}.txt",
+            label_dest_dir / f"{row['filename']}.txt",
+        )
+        shutil.move(
+            image_dir / f"{row['filename']}.jpg",
+            image_dest_dir / f"{row['filename']}.jpg",
+        )
+
+
 def max_cells(length, cell_min_size, gutter_size):
     """
     Calculate the maximum number of cells of size >= cell_min_size that can fit in a given length, with a fixed gutter size between the cells.
     """
     return math.floor((length + gutter_size) / (cell_min_size + gutter_size))
 
-def separate_crops_into_cells(paintings, crops, crop_size=1080):
-    gutter_size = crop_size # The fixed size of the gutter between the grid cells
-    min_cell_size = 2 * crop_size # The minimum size of a grid cell
 
-    paintings['n_cells_width'] = paintings['width'].apply(lambda x: max_cells(x, min_cell_size, gutter_size))
-    paintings['n_cells_height'] = paintings['height'].apply(lambda x: max_cells(x, min_cell_size, gutter_size))
+def separate_crops_into_cells(paintings, crops, crop_size=1080):
+    gutter_size = crop_size  # The fixed size of the gutter between the grid cells
+    min_cell_size = 2 * crop_size  # The minimum size of a grid cell
+
+    paintings["n_cells_width"] = paintings["width"].apply(
+        lambda x: max_cells(x, min_cell_size, gutter_size)
+    )
+    paintings["n_cells_height"] = paintings["height"].apply(
+        lambda x: max_cells(x, min_cell_size, gutter_size)
+    )
 
     def get_grid_cell(row):
-        painting = paintings.loc[paintings['paintingName'] == row['paintingName']]
+        painting = paintings.loc[paintings["paintingName"] == row["paintingName"]]
 
-        cell_width = (painting['width'] - (painting['n_cells_width'] - 1) * gutter_size) / painting['n_cells_width']
-        cell_height = (painting['height'] - (painting['n_cells_height'] - 1) * gutter_size) / painting['n_cells_height']
+        cell_width = (
+            painting["width"] - (painting["n_cells_width"] - 1) * gutter_size
+        ) / painting["n_cells_width"]
+        cell_height = (
+            painting["height"] - (painting["n_cells_height"] - 1) * gutter_size
+        ) / painting["n_cells_height"]
 
-        x_min, y_min, x_max, y_max = [int(x) for x in row['location']]
+        x_min, y_min, x_max, y_max = [int(x) for x in row["location"]]
         center_x, center_y = (x_min + x_max) / 2, (y_min + y_max) / 2
 
         # Determine the grid cell coordinates
@@ -134,15 +162,17 @@ def separate_crops_into_cells(paintings, crops, crop_size=1080):
         return (grid_x, grid_y)
 
     # Apply the grid cell identification function to each crop
-    crops['grid_cell'] = crops.apply(get_grid_cell, axis=1)
+    crops["grid_cell"] = crops.apply(get_grid_cell, axis=1)
 
     return crops
 
+
 def count_classes(df):
     color_count = Counter()
-    for marble_list in df['classes']:
+    for marble_list in df["classes"]:
         color_count += Counter(marble_list)
     return color_count
+
 
 def counter_diff(counter1, counter2):
     diff = 0
@@ -150,7 +180,10 @@ def counter_diff(counter1, counter2):
         diff += abs(counter1[key] - counter2[key])
     return diff
 
-def assign_train_val_sets(df, train_percentage, val_percentage, capacity_constraint_multiplier):
+
+def assign_train_val_sets(
+    df, train_percentage, val_percentage, capacity_constraint_multiplier
+):
     """
     Assign each crop to either the train or validation set, while trying to keep the number of crops of each color in each set as close as possible.
     capacity_constraint_multiplier: higher value means more weight on capacity constraint
@@ -158,45 +191,63 @@ def assign_train_val_sets(df, train_percentage, val_percentage, capacity_constra
     total_crops = len(df.index)
     train_capacity = total_crops * train_percentage
     val_capacity = total_crops * val_percentage
-    df['set'] = None
+    df["set"] = None
 
-    for paintingName in df['paintingName'].unique():
-        for grid_cell in df[df['paintingName'] == paintingName]['grid_cell'].unique():
-            bucket_df = df[(df['paintingName'] == paintingName) & (df['grid_cell'] == grid_cell)]
+    for paintingName in df["paintingName"].unique():
+        for grid_cell in df[df["paintingName"] == paintingName]["grid_cell"].unique():
+            bucket_df = df[
+                (df["paintingName"] == paintingName) & (df["grid_cell"] == grid_cell)
+            ]
             bucket_color_count = count_classes(bucket_df)
 
-            set_color_counts = [count_classes(df[df['set'] == 'train']), count_classes(df[df['set'] == 'val'])]
+            set_color_counts = [
+                count_classes(df[df["set"] == "train"]),
+                count_classes(df[df["set"] == "val"]),
+            ]
 
-            color_diffs = [counter_diff(set_color_counts[0], bucket_color_count), counter_diff(set_color_counts[1], bucket_color_count)]
+            color_diffs = [
+                counter_diff(set_color_counts[0], bucket_color_count),
+                counter_diff(set_color_counts[1], bucket_color_count),
+            ]
 
             # Increase the weight of color difference if the set exceeds capacity
-            if len(df[df['set'] == 'train']) > train_capacity:
+            if len(df[df["set"] == "train"]) > train_capacity:
                 color_diffs[0] *= capacity_constraint_multiplier
-            if len(df[df['set'] == 'val']) > val_capacity:
+            if len(df[df["set"] == "val"]) > val_capacity:
                 color_diffs[1] *= capacity_constraint_multiplier
 
             if color_diffs[0] <= color_diffs[1]:
-                df.loc[bucket_df.index, 'set'] = 'train'
+                df.loc[bucket_df.index, "set"] = "train"
             else:
-                df.loc[bucket_df.index, 'set'] = 'val'
+                df.loc[bucket_df.index, "set"] = "val"
 
-def divide_train_val_sets(df, train_percentage=0.8, val_percentage=0.2, capacity_constraint_multiplier=3):
-    assign_train_val_sets(df, train_percentage, val_percentage, capacity_constraint_multiplier)
-    return [df[df['set'] == 'train'], df[df['set'] == 'val']]
+
+def divide_train_val_sets(
+    df, train_percentage=0.8, val_percentage=0.2, capacity_constraint_multiplier=3
+):
+    assign_train_val_sets(
+        df, train_percentage, val_percentage, capacity_constraint_multiplier
+    )
+    return [df[df["set"] == "train"], df[df["set"] == "val"]]
+
 
 def print_stats(train_files, validation_files, len_both):
     num_classes_train = count_classes(train_files)
     for key in num_classes_train:
         num_classes_train[key] /= len(train_files)
     # sort the dictionary by value
-    num_classes_train = dict(sorted(num_classes_train.items(), key=lambda item: item[1], reverse=True))
+    num_classes_train = dict(
+        sorted(num_classes_train.items(), key=lambda item: item[1], reverse=True)
+    )
 
     num_classes_val = count_classes(validation_files)
     for key in num_classes_val:
         num_classes_val[key] /= len(validation_files)
     # sort the dictionary by value
-    num_classes_val = dict(sorted(num_classes_val.items(), key=lambda item: item[1], reverse=True))
-    
+    num_classes_val = dict(
+        sorted(num_classes_val.items(), key=lambda item: item[1], reverse=True)
+    )
+
     logging.info("Train and Validaton set class distribution:")
     logging.info("only in train set:")
     for key in num_classes_train:
@@ -215,16 +266,25 @@ def print_stats(train_files, validation_files, len_both):
     logging.info(distribution_df)
 
     # Print the actual split percentage
-    logging.info(f"Train set size: {len(train_files.index)} ({len(train_files.index) / len_both * 100}% of all crops excluding test painting crops)")
-    logging.info(f"Validation set size: {len(validation_files.index)} ({len(validation_files.index) / len_both * 100}% of all crops excluding test painting crops)")
+    logging.info(
+        f"Train set size: {len(train_files.index)} ({len(train_files.index) / len_both * 100}% of all crops excluding test painting crops)"
+    )
+    logging.info(
+        f"Validation set size: {len(validation_files.index)} ({len(validation_files.index) / len_both * 100}% of all crops excluding test painting crops)"
+    )
 
 
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("location", help="Location of the dataset")
-    parser.add_argument("--output", '-o', help="Location to save the separated dataset", default=None)
-    parser.add_argument('--force', '-f', help="Force overwrite of existing files", action='store_true')
+    parser.add_argument(
+        "--output", "-o", help="Location to save the separated dataset", default=None
+    )
+    parser.add_argument(
+        "--force", "-f", help="Force overwrite of existing files", action="store_true"
+    )
     return parser.parse_args()
+
 
 def print_welcome(args):
     padding = 140
@@ -235,6 +295,7 @@ def print_welcome(args):
     print(f" Force overwrite: {args.force} ".center(padding))
     print("".center(padding, "8"))
     print("\n\n")
+
 
 def main():
     args = get_args()
@@ -248,46 +309,49 @@ def main():
     PAINTING_SIZES_FILE = dataset_dir / "painting_sizes.txt"
     CLASSES_FILE = dataset_dir / "classes.txt"
     OUT_YAML_FILE = output_dir / "dataset.yaml"
+    TEST_PAINTING_FILE = dataset_dir / "test_painting.txt"
     LABELS_DIR = dataset_dir / "cropped" / "labels"
     IMAGES_DIR = dataset_dir / "cropped" / "images"
+    TEST_IMAGES_DIR = dataset_dir / "images"
+    TEST_LABELS_DIR = dataset_dir / "labels"
     OUTPUT_DIRS = {}
+
+    # Create the output directories
     for split in ["train", "valid", "test"]:
         for folder in ["images", "labels"]:
             path = output_dir / split / folder
 
             if path.exists():
                 if not args.force:
-                    logging.error(f"Output directory {path} already exists. Use -f to force overwrite.")
+                    logging.error(
+                        f"Output directory {path} already exists. Use -f to force overwrite."
+                    )
                     exit()
                 logging.warning(f"Output directory {path} already exists. Overwriting.")
                 shutil.rmtree(path)
 
             os.makedirs(path, exist_ok=True)
             OUTPUT_DIRS[split + "_" + folder] = path
-        
-    
+
+    # Read test painting file
+    with open(TEST_PAINTING_FILE, "r") as file:
+        test_painting = file.readline().strip()
+
     # Read the crops location file and the label files
     crops, max_crop_dimension = read_crops_location(CROPS_LOCATION_FILE)
-    painting_classes, crops = read_label_files(dataset_dir / "cropped" / "labels", crops)
+    painting_classes, crops = read_label_files(LABELS_DIR, crops)
     paintings = read_painting_sizes(PAINTING_SIZES_FILE)
 
     # Get the ordered list of classes
     with open(CLASSES_FILE, "r") as file:
         classes = [line.strip() for line in file]
 
-    # Find the painting that will be used for testing
-    test_painting = find_test_painting(painting_classes)
-    logging.info(f"Painting that will be used for testing: {test_painting[0][0]} ({test_painting[0][1]} classes)")
-
-    # drop the test painting from the crops and paintings datasets, but keep the test painting crops
-    paintings = paintings[paintings['paintingName'] != test_painting[0][0]]
-    test_files = crops[crops['paintingName'] == test_painting[0][0]]
-    crops = crops[crops['paintingName'] != test_painting[0][0]]
-
     # Separate the crops into cells
     crops = separate_crops_into_cells(paintings, crops, max_crop_dimension)
 
-    len_both = len(crops.index) # used for printing stats
+    # TODO Visualize the cells
+
+    len_both = len(crops.index)  # used for printing stats
 
     # Separate the crops into train and validation sets
     train_files, validation_files = divide_train_val_sets(crops)
@@ -295,9 +359,34 @@ def main():
     # Print stats
     print_stats(train_files, validation_files, len_both)
 
-    move_files(train_files, LABELS_DIR, IMAGES_DIR, OUTPUT_DIRS["train_labels"], OUTPUT_DIRS["train_images"], "train set")
-    move_files(validation_files, LABELS_DIR, IMAGES_DIR, OUTPUT_DIRS["valid_labels"], OUTPUT_DIRS["valid_images"], "validation set")
-    move_files(test_files, LABELS_DIR, IMAGES_DIR, OUTPUT_DIRS["test_labels"], OUTPUT_DIRS["test_images"], "test set")
+    # TODO Visualize the train and validation sets
+
+    move_files(
+        train_files,
+        LABELS_DIR,
+        IMAGES_DIR,
+        OUTPUT_DIRS["train_labels"],
+        OUTPUT_DIRS["train_images"],
+        "train set",
+    )
+    move_files(
+        validation_files,
+        LABELS_DIR,
+        IMAGES_DIR,
+        OUTPUT_DIRS["valid_labels"],
+        OUTPUT_DIRS["valid_images"],
+        "validation set",
+    )
+
+    # Copy the test image psb into the test set
+    shutil.copy(
+        TEST_IMAGES_DIR / f"{test_painting}.psb",
+        OUTPUT_DIRS["test_images"] / f"{test_painting}.psb",
+    )
+    shutil.copy(
+        TEST_LABELS_DIR / f"{test_painting}.txt",
+        OUTPUT_DIRS["test_labels"] / f"{test_painting}.txt",
+    )
 
     # save yaml file in the yolov5 format
     with open(OUT_YAML_FILE, "w") as file:
@@ -308,6 +397,7 @@ def main():
         file.write("names:\n")
         for c in classes:
             file.write(f"- {c}\n")
+
 
 if __name__ == "__main__":
     main()
