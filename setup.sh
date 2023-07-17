@@ -3,7 +3,7 @@
 #SBATCH --output=setup-%j.log
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=200G
-#SBATCH --time=05:00:00
+#SBATCH --time=04:00:00
 
 # Accept flags from the command line:
 # -d: force download of dataset
@@ -63,7 +63,7 @@ fi
 echo ""
 echo ""
 echo "88888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888"
-echo "SWORD-SIMP Dataset Preprocessor"
+echo "SWORD-SIMP Dataset Setup Script"
 echo "88888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888888"
 echo "Dataset location: $SCRATCH/dataset/source"
 echo "Force download of database = $download"
@@ -100,7 +100,6 @@ python3 -u $WORKDIR/extract_bboxes.py $SCRATCH/dataset/source/images -o $SCRATCH
 # generate crops (force if flag is set), if it fails exit
 python3 -u $WORKDIR/generate_crops.py $SCRATCH/dataset/source/ $numCrops $crops || exit
 
-# separate crops in train/val/test sets (force if flag is set), if it fails exit
-python3 -u $WORKDIR/separate_crops.py $SCRATCH/dataset/source/ -o $SCRATCH/dataset/ $separate || exit
+sbatch --dependency=afterok:$SLURM_JOB_ID separate_crops.sh $separate
 
 deactivate
