@@ -4,9 +4,7 @@ import sys
 
 def delete_file(file):
     try:
-        # Check if the file exists
         if os.path.isfile(file):
-            # Delete the file
             os.remove(file)
             print(f"Successfully deleted {file}")
         else:
@@ -16,14 +14,9 @@ def delete_file(file):
 
 
 def delete_files(file_path):
-    # Open the file in read mode
     with open(file_path, "r") as f:
-        # Read lines from the file
         lines = f.readlines()
-
-        # Loop through each line (file)
         for line in lines:
-            # Strip the newline character from the line
             file_to_delete = line.strip()
             image_file_to_delete = file_to_delete.replace(
                 "/labels/", "/images/"

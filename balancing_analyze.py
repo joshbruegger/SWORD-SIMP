@@ -50,7 +50,90 @@ def plot_histogram(class_counts, title, filename, threshold=None):
     plt.clf()
 
 
-if __name__ == "__main__":
+def calculate_file_scores(
+    c_hist, cs_in_file, label_files, files_to_discard, thres, class_files
+):
+    file_scores = []
+    file_scores.extend(
+        (
+            f,
+            sum(c_hist[c] - thres for c in cs_in_file[f] if c_hist[c] > thres),
+            len([c for c in set(cs_in_file[f]) if c_hist[c] > thres]),
+        )
+        for f in label_files
+        if f not in files_to_discard
+    )
+    return file_scores
+
+
+def read_files(label_files):
+    # Dictionary to keep track of the number of instances of each class
+    class_counts = defaultdict(int)
+    # Dictionary to keep track of the files where each class appears
+    class_files = defaultdict(list)
+    # Dictionary to keep track of the classes for each file
+    file_classes = defaultdict(list)
+
+    for file in tqdm(label_files, desc="Processing files"):
+        with open(file, "r") as f:
+            lines = f.readlines()
+            for line in lines:
+                class_id = int(line.split()[0])
+                class_counts[class_id] += 1
+                class_files[class_id].append(file)
+                file_classes[file].append(class_id)
+    return class_counts, file_classes, class_files
+
+
+def get_files_to_discard(label_files, c_hist, cs_in_file, class_files, thres):
+    files_to_discard = set()
+    file_scores = calculate_file_scores(
+        c_hist,
+        cs_in_file,
+        label_files,
+        files_to_discard,
+        thres,
+        class_files,
+    )
+
+    while file_scores:
+        if all(c_hist[c] <= thres for c in c_hist.keys()):
+            break
+
+        file_scores.sort(key=lambda x: (x[1], x[2]), reverse=True)
+        file = file_scores.pop(0)[0]
+        over_represented = [c for c in cs_in_file[file] if c_hist[c] > thres]
+        unique = set(cs_in_file[file])
+
+        if not over_represented or unique.difference(over_represented):
+            continue
+
+        imbal_kept = sum(abs(c_hist[c] - thres) for c in unique)
+        imbal_removed = sum(
+            abs(c_hist[c] - cs_in_file[file].count(c) - thres) for c in unique
+        )
+
+        if imbal_removed > imbal_kept:
+            continue
+
+        files_to_discard.add(file)
+
+        for class_id in unique:
+            c_hist[class_id] -= cs_in_file[file].count(class_id)
+
+        file_scores = calculate_file_scores(
+            c_hist,
+            cs_in_file,
+            label_files,
+            files_to_discard,
+            thres,
+            class_files,
+        )
+
+    return files_to_discard
+
+
+def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -65,44 +148,19 @@ if __name__ == "__main__":
     label_files = glob.glob(labels_path)
     print(f"Number of label files: {len(label_files)}")
 
-    class_counts = defaultdict(int)
-    # Dictionary to keep track of the number of instances of each class
-    class_files = defaultdict(
-        list
-    )  # Dictionary to keep track of the files where each class appears
-    file_classes = defaultdict(
-        list
-    )  # Dictionary to keep track of the classes for each file
-
-    for file in tqdm(label_files):
-        with open(file, "r") as f:
-            lines = f.readlines()
-            for line in lines:
-                class_id = int(line.split()[0])
-                class_counts[class_id] += 1
-                class_files[class_id].append(file)
-                file_classes[file].append(class_id)
+    class_counts, file_classes, class_files = read_files(label_files)
 
     # Sort the dictionary by count
     class_counts = {
         k: v
         for k, v in sorted(class_counts.items(), key=lambda item: item[1], reverse=True)
     }
-    print("Train class counts:")
-    print(class_counts)
 
-    # Calculate the 25, 35, 40, 50 percentiles
-    percentile_25 = int(np.percentile(list(class_counts.values()), 25))
-    percentile_35 = int(np.percentile(list(class_counts.values()), 35))
-    percentile_40 = int(np.percentile(list(class_counts.values()), 40))
-    percentile_50 = int(np.percentile(list(class_counts.values()), 50))
-    print(f"25th percentile: {percentile_25}")
-    print(f"35th percentile: {percentile_35}")
-    print(f"40th percentile: {percentile_40}")
-    print(f"50th percentile: {percentile_50}")
+    print(f"Class counts:\n{class_counts}")
 
-    threshold = percentile_35
-    print(f"Threshold: {threshold}")
+    percentile = 35
+    threshold = int(np.percentile(list(class_counts.values()), percentile))
+    print(f"Threshold: {threshold} ({percentile} percentile)")
 
     plot_histogram(
         class_counts,
@@ -111,52 +169,9 @@ if __name__ == "__main__":
         threshold=threshold,
     )
 
-    # Compute the over-representation score of each file
-    file_scores = {
-        file: sum(
-            class_counts[c_id] - threshold
-            for c_id in file_classes[file]
-            if class_counts[c_id] > threshold
-        )
-        for file in label_files
-    }
-
-    # Sort the files by their scores in descending order
-    sorted_files = sorted(file_scores.items(), key=lambda item: item[1], reverse=True)
-
-    # Determine the files to discard
-    files_to_discard = set()
-    for file, score in sorted_files:  # For each file, starting from the highest score
-        over_represented_classes = [
-            c for c in file_classes[file] if class_counts[c] > threshold
-        ]
-        unique_classes = set(file_classes[file])
-        # If the file contains over-represented classes and no under-represented classes, discard the file
-        if over_represented_classes and not unique_classes.difference(
-            over_represented_classes
-        ):
-            # Calculate the inbalance score before and after discarding the file
-            file_inbalance_score_before = sum(
-                abs(class_counts[c] - threshold) for c in unique_classes
-            )
-            file_inbalance_score_after = sum(
-                abs(class_counts[c] - file_classes[file].count(c) - threshold)
-                for c in unique_classes
-            )
-            # If the inbalance score is worse after discarding the file, don't discard it
-            if file_inbalance_score_after > file_inbalance_score_before:
-                continue
-
-            files_to_discard.add(file)  # Mark the file to be discarded
-            # Reduce the count for each over-represented class instance in the file
-            for class_id in unique_classes:
-                class_counts[class_id] -= file_classes[file].count(class_id)
-
-            # After discarding a file, check if all classes are now balanced. If so, stop
-            if all(
-                class_counts[c] <= threshold for c in class_counts.keys()
-            ):  # If all classes are now balanced
-                break
+    files_to_discard = get_files_to_discard(
+        label_files, class_counts, file_classes, class_files, threshold
+    )
 
     num_discard = len(files_to_discard)
     num_before = len(label_files)
@@ -168,23 +183,25 @@ if __name__ == "__main__":
     print(
         f"Number of files after discarding: {num_after} ({percentage_remaining:.2f}% of original)"
     )
-    print("Class counts after discarding:")
-    print(class_counts)
+
+    # Sort the dictionary by count
+    class_counts = {
+        k: v
+        for k, v in sorted(class_counts.items(), key=lambda item: item[1], reverse=True)
+    }
+
+    print(f"Class counts after discarding:\n{class_counts}")
     plot_histogram(
         class_counts,
         "Class Histogram After Discarding Files",
         "balancing_analyze_after_out.png",
+        threshold=threshold,
     )
-    # copy the dictionary
-    # train_class_counts_after = class_counts.copy()
-    # # remove the counts for the discarded files
-    # for file in files_to_discard:
-    #     for class_id in file_classes[file]:
-    #         train_class_counts_after[class_id] -= 1
-    # print(train_class_counts_after)
-    # Plot the class counts as a histogram
 
-    # Save the list of files to discard
     with open("balancing_analyze_to_discard_out.txt", "w") as f:
         for file in files_to_discard:
             f.write(file + "\n")
+
+
+if __name__ == "__main__":
+    main()
