@@ -50,19 +50,16 @@ def plot_histogram(class_counts, title, filename, threshold=None):
     plt.clf()
 
 
-def calculate_file_scores(
-    c_hist, cs_in_file, label_files, files_to_discard, thres, class_files
-):
-    file_scores = []
-    file_scores.extend(
-        (
-            f,
-            sum(c_hist[c] - thres for c in cs_in_file[f] if c_hist[c] > thres),
-            len([c for c in set(cs_in_file[f]) if c_hist[c] > thres]),
-        )
-        for f in label_files
-        if f not in files_to_discard
-    )
+def get_file_scores(c_hist, cs_in_file, label_files, files_to_discard, thres):
+    file_scores = defaultdict(tuple[int, int])
+    for f in label_files:
+        if f not in files_to_discard:
+            unique = set(cs_in_file[f])
+            file_scores[f] = (
+                sum(c_hist[c] - thres for c in cs_in_file[f] if c_hist[c] > thres),
+                len([c for c in unique if c_hist[c] > thres]),
+            )
+
     return file_scores
 
 
@@ -85,52 +82,54 @@ def read_files(label_files):
     return class_counts, file_classes, class_files
 
 
-def get_files_to_discard(label_files, c_hist, cs_in_file, class_files, thres):
-    files_to_discard = set()
-    file_scores = calculate_file_scores(
+def get_discarded(label_files, c_hist, cs_in_file, thres, class_files):
+    to_discard = set()
+    file_scores = get_file_scores(
         c_hist,
         cs_in_file,
         label_files,
-        files_to_discard,
+        to_discard,
         thres,
-        class_files,
     )
 
+    t = tqdm(desc="Discarding files", total=len(file_scores))
     while file_scores:
+        t.update(1)
         if all(c_hist[c] <= thres for c in c_hist.keys()):
             break
-
-        file_scores.sort(key=lambda x: (x[1], x[2]), reverse=True)
-        file = file_scores.pop(0)[0]
+        file, (imbal, u) = max(file_scores.items(), key=lambda x: (x[1][0], x[1][1]))
+        file_scores.pop(file)
         over_represented = [c for c in cs_in_file[file] if c_hist[c] > thres]
         unique = set(cs_in_file[file])
 
         if not over_represented or unique.difference(over_represented):
             continue
 
-        imbal_kept = sum(abs(c_hist[c] - thres) for c in unique)
-        imbal_removed = sum(
-            abs(c_hist[c] - cs_in_file[file].count(c) - thres) for c in unique
-        )
+        imbal_kept, imbal_removed = 0, 0
+        for c in unique:
+            imbal_kept += abs(c_hist[c] - thres)
+            imbal_removed += abs(c_hist[c] - cs_in_file[file].count(c) - thres)
 
         if imbal_removed > imbal_kept:
             continue
 
-        files_to_discard.add(file)
+        to_discard.add(file)
 
         for class_id in unique:
             c_hist[class_id] -= cs_in_file[file].count(class_id)
+            for f in class_files[class_id]:
+                if f in file_scores:
+                    u = set(cs_in_file[f])
+                    file_scores[f] = (
+                        sum(
+                            c_hist[c] - thres
+                            for c in cs_in_file[f]
+                            if c_hist[c] > thres
+                        ),
+                        len([c for c in u if c_hist[c] > thres]),
+                    )
 
-        file_scores = calculate_file_scores(
-            c_hist,
-            cs_in_file,
-            label_files,
-            files_to_discard,
-            thres,
-            class_files,
-        )
-
-    return files_to_discard
+    return to_discard
 
 
 def main():
@@ -169,8 +168,8 @@ def main():
         threshold=threshold,
     )
 
-    files_to_discard = get_files_to_discard(
-        label_files, class_counts, file_classes, class_files, threshold
+    files_to_discard = get_discarded(
+        label_files, class_counts, file_classes, threshold, class_files
     )
 
     num_discard = len(files_to_discard)
