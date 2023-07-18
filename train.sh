@@ -3,7 +3,7 @@
 #SBATCH --job-name=thesis_train
 #SBATCH --output=train-%j.log
 #SBATCH --time=04:00:00
-#SBATCH --mem=10G
+#SBATCH --mem=16G
 
 # Help function
 function usage {
@@ -14,10 +14,31 @@ function usage {
 }
 
 # Process flags
-e=100
-b=32
-echo "Epochs: $e"
-echo "Batch size: $b"
+EPOCHS=100
+BATCH_SIZE=32
+RESUBMITS=0
+while getopts ':e:b:r:' opt; do
+    case $opt in
+    #   (v)   ((VERBOSE++));;
+      (e)   EPOCHS=$OPTARG;;
+      (b)   BATCH_SIZE=$OPTARG;;
+      (r)   RESUBMITS=$OPTARG;;
+      (\?)  usage;;
+      (:)   # "optional arguments" (missing option-argument handling)
+            case $OPTARG in
+              (e) usage;; # error, according to our syntax
+              (b) usage;; # error, according to our syntax
+            #   (l) :;;      # acceptable but does nothing
+            esac;;
+    esac
+done
+
+shift "$OPTIND"
+# remaining is "$@"
+
+echo "Epochs: $EPOCHS"
+echo "Batch size: $BATCH_SIZE"
+echo "Resubmits: $RESUBMITS"
 
 WORKDIR=$(pwd)
 SCRATCH=/scratch/$USER
@@ -26,6 +47,6 @@ SCRATCH=/scratch/$USER
 chmod +x $WORKDIR/setup_env.sh
 source $WORKDIR/setup_env.sh
 
-python3 -u train.py -d $SCRATCH/dataset -e $e -b $b
+python3 -u train.py -d $SCRATCH/dataset -e $EPOCHS -b $BATCH_SIZE -r $RESUBMITS
 
 deactivate
