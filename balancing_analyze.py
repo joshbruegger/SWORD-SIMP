@@ -10,6 +10,12 @@ import matplotlib.transforms as transforms
 
 def plot_histogram(class_counts, title, filename, threshold=None):
     """Plot the class counts as a histogram and save the figure."""
+    class_counts = {
+        k: v
+        for k, v in sorted(class_counts.items(), key=lambda item: item[1], reverse=True)
+    }
+    print(f"Class counts:\n{class_counts}")
+
     plt.clf()
     plt.figure(figsize=(15, 10))
 
@@ -50,15 +56,19 @@ def plot_histogram(class_counts, title, filename, threshold=None):
     plt.clf()
 
 
+def score_tuple(c_hist, cs_in_file, unique, thres, f):
+    return (
+        sum(c_hist[c] - thres for c in cs_in_file[f] if c_hist[c] > thres),
+        len([c for c in unique if c_hist[c] > thres]),
+    )
+
+
 def get_file_scores(c_hist, cs_in_file, label_files, files_to_discard, thres):
     file_scores = defaultdict(tuple[int, int])
     for f in label_files:
         if f not in files_to_discard:
             unique = set(cs_in_file[f])
-            file_scores[f] = (
-                sum(c_hist[c] - thres for c in cs_in_file[f] if c_hist[c] > thres),
-                len([c for c in unique if c_hist[c] > thres]),
-            )
+            file_scores[f] = score_tuple(c_hist, cs_in_file, unique, thres, f)
 
     return file_scores
 
@@ -84,13 +94,7 @@ def read_files(label_files):
 
 def get_discarded(label_files, c_hist, cs_in_file, thres, class_files):
     to_discard = set()
-    file_scores = get_file_scores(
-        c_hist,
-        cs_in_file,
-        label_files,
-        to_discard,
-        thres,
-    )
+    file_scores = get_file_scores(c_hist, cs_in_file, label_files, to_discard, thres)
 
     t = tqdm(desc="Discarding files", total=len(file_scores))
     while file_scores:
@@ -117,19 +121,40 @@ def get_discarded(label_files, c_hist, cs_in_file, thres, class_files):
 
         for class_id in unique:
             c_hist[class_id] -= cs_in_file[file].count(class_id)
+
+        for class_id in unique:
             for f in class_files[class_id]:
                 if f in file_scores:
                     u = set(cs_in_file[f])
-                    file_scores[f] = (
-                        sum(
-                            c_hist[c] - thres
-                            for c in cs_in_file[f]
-                            if c_hist[c] > thres
-                        ),
-                        len([c for c in u if c_hist[c] > thres]),
-                    )
+                    file_scores[f] = score_tuple(c_hist, cs_in_file, u, thres, f)
 
     return to_discard
+
+
+def print_info(label_files, threshold, files_to_discard, class_counts):
+    num_discard = len(files_to_discard)
+    num_before = len(label_files)
+    num_after = num_before - num_discard
+    percentage_remaining = num_after / num_before * 100
+
+    print(f"Number of files to discard: {num_discard}")
+    print(f"Number of files before discarding: {num_before}")
+    print(
+        f"Number of files after discarding: {num_after} ({percentage_remaining:.2f}% of original)"
+    )
+
+    # calculate imbalance score
+    imbalance_score = 0
+    for _, count in class_counts.items():
+        imbalance_score += abs(count - threshold)
+    print(f"Imbalance score: {imbalance_score}")
+
+    plot_histogram(
+        class_counts,
+        "Class Histogram After Discarding Files",
+        f"balancing_analyze_after_out.png",
+        threshold=threshold,
+    )
 
 
 def main():
@@ -144,61 +169,34 @@ def main():
 
     # Get the list of all label files in each directory
     labels_path = os.path.join(root_dir, "train", "labels", "*.txt")
-    label_files = glob.glob(labels_path)
-    print(f"Number of label files: {len(label_files)}")
+    labels = glob.glob(labels_path)
+    print(f"Number of label files: {len(labels)}")
 
-    class_counts, file_classes, class_files = read_files(label_files)
-
-    # Sort the dictionary by count
-    class_counts = {
-        k: v
-        for k, v in sorted(class_counts.items(), key=lambda item: item[1], reverse=True)
-    }
-
-    print(f"Class counts:\n{class_counts}")
+    c_hist, cs_in_file, class_files = read_files(labels)
 
     percentile = 35
-    threshold = int(np.percentile(list(class_counts.values()), percentile))
-    print(f"Threshold: {threshold} ({percentile} percentile)")
+    thres = int(np.percentile(list(c_hist.values()), percentile))
+    print(f"Threshold: {thres} ({percentile} percentile)")
 
     plot_histogram(
-        class_counts,
+        c_hist,
         "Class Histogram Before Discarding Files",
         "balancing_analyze_before_out.png",
-        threshold=threshold,
+        threshold=thres,
     )
 
-    files_to_discard = get_discarded(
-        label_files, class_counts, file_classes, threshold, class_files
+    discarded = get_discarded(
+        labels,
+        c_hist,
+        cs_in_file,
+        thres,
+        class_files,
     )
 
-    num_discard = len(files_to_discard)
-    num_before = len(label_files)
-    num_after = num_before - num_discard
-    percentage_remaining = num_after / num_before * 100
+    print_info(labels, thres, discarded, c_hist)
 
-    print(f"Number of files to discard: {num_discard}")
-    print(f"Number of files before discarding: {num_before}")
-    print(
-        f"Number of files after discarding: {num_after} ({percentage_remaining:.2f}% of original)"
-    )
-
-    # Sort the dictionary by count
-    class_counts = {
-        k: v
-        for k, v in sorted(class_counts.items(), key=lambda item: item[1], reverse=True)
-    }
-
-    print(f"Class counts after discarding:\n{class_counts}")
-    plot_histogram(
-        class_counts,
-        "Class Histogram After Discarding Files",
-        "balancing_analyze_after_out.png",
-        threshold=threshold,
-    )
-
-    with open("balancing_analyze_to_discard_out.txt", "w") as f:
-        for file in files_to_discard:
+    with open(f"balancing_analyze_to_discard_out.txt", "w") as f:
+        for file in discarded:
             f.write(file + "\n")
 
 
