@@ -14,6 +14,4 @@ separate=$1
 # separate crops in train/val/test sets (force if flag is set), if it fails exit
 python3 -u separate_crops.py $SCRATCH/dataset/source/ -o $SCRATCH/dataset/ $separate || exit
 
-python3 -u balancing_analyze.py $SCRATCH/dataset || exit
-
 deactivate
