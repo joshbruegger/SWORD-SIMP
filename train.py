@@ -76,12 +76,19 @@ class AvoidExceedingWalltimeCallback(Callback):
     @multi_process_safe
     def on_train_loader_start(self, context: PhaseContext) -> None:
         self.epoch_start_time = time.time()
+        print(
+            f"\n  [WALLTIME CALLBACK]: Recorded Epoch start time: {self.epoch_start_time}\n"
+        )
 
     @multi_process_safe
-    def on_validation_end_best_epoch(self, context: PhaseContext) -> None:
+    def on_validation_loader_end(self, context: PhaseContext) -> None:
         # epoch (and val) ended
         self.epoch_end_time = time.time()
         epoch_time = self.epoch_end_time - self.epoch_start_time
+
+        print(
+            f"\n  [WALLTIME CALLBACK]: Epoch-Validation cycle ended! Took {epoch_time}s.\n"
+        )
 
         remaining_time = run(
             "squeue -j $SLURM_JOBID -o %L -h", shell=True, capture_output=True
@@ -104,9 +111,12 @@ class AvoidExceedingWalltimeCallback(Callback):
             + int(seconds)
         )
 
-        if epoch_time + 5 * 60 > remaining_time:
+        print(f"\n  [WALLTIME CALLBACK]: Remaining time: {remaining_time}s\n")
+
+        buffer = 15
+        if epoch_time + buffer * 60 > remaining_time:
             print(
-                f"\n  [WALLTIME CALLBACK: Remaining time {remaining_time}s, not enough for another epoch! Resubmitting job...]  \n"
+                f"\n  [WALLTIME CALLBACK]: Remaining time not enough for another epoch (+{30} minutes buffer)! Resubmitting job...\n"
             )
             context.stop_training = True
             run(
