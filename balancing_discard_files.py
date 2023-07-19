@@ -2,10 +2,11 @@ import os
 import sys
 
 
-def delete_file(file):
+def delete_file(file, dest):
     try:
         if os.path.isfile(file):
-            os.remove(file)
+            # os.remove(file)
+            os.rename(file, dest)
             print(f"Successfully deleted {file}")
         else:
             print(f"Error: {file} does not exist")
@@ -22,9 +23,15 @@ def delete_files(file_path):
                 "/labels/", "/images/"
             ).replace(".txt", ".jpg")
 
-            # Delete the files
-            delete_file(file_to_delete)
-            delete_file(image_file_to_delete)
+            deleted_path = file_to_delete.replace("/labels/", "/deleted/labels/")
+            deleted_image_path = image_file_to_delete.replace(
+                "/images/", "/deleted/images/"
+            )
+            os.makedirs(os.path.dirname(deleted_path), exist_ok=True)
+            os.makedirs(os.path.dirname(deleted_image_path), exist_ok=True)
+
+            delete_file(file_to_delete, deleted_path)
+            delete_file(image_file_to_delete, deleted_image_path)
 
 
 if __name__ == "__main__":
