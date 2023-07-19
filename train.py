@@ -59,10 +59,6 @@ class Config:
     VAL_IMAGES_DIR = "valid/images"  # child dir of DATA_DIR where validation images are
     VAL_LABELS_DIR = "valid/labels"  # child dir of DATA_DIR where validation labels are
 
-    # if you have a test set
-    TEST_IMAGES_DIR = "test/images"  # child dir of DATA_DIR where test images are
-    TEST_LABELS_DIR = "test/labels"  # child dir of DATA_DIR where test labels are
-
     # model params
     MODEL_NAME = "yolo_nas_l"  # choose from yolo_nas_s, yolo_nas_m, yolo_nas_l
     PRETRAINED_WEIGHTS = "coco"  # only one option here: coco
@@ -139,16 +135,6 @@ def train(config):
             "data_dir": config.DATA_DIR,
             "images_dir": config.VAL_IMAGES_DIR,
             "labels_dir": config.VAL_LABELS_DIR,
-            "classes": config.CLASSES,
-        },
-        dataloader_params=config.DATALOADER_PARAMS,
-    )
-
-    test_data = coco_detection_yolo_format_val(
-        dataset_params={
-            "data_dir": config.DATA_DIR,
-            "images_dir": config.TEST_IMAGES_DIR,
-            "labels_dir": config.TEST_LABELS_DIR,
             "classes": config.CLASSES,
         },
         dataloader_params=config.DATALOADER_PARAMS,
@@ -237,5 +223,5 @@ if __name__ == "__main__":
     print(f" Num workers: {args.num_workers} ".center(padding, "8"))
     print("\n\n")
 
-    Config = Config(args)
-    train(Config)
+    config = Config(args)
+    train(config)
