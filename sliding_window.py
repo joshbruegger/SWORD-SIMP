@@ -57,7 +57,10 @@ class SlidingWindowDetect:
         conf=0.6,  # Confidence threshold for predictions, below which predictions are discarded
         iou=0.3,  # Max overlap between bboxes before one is removed during NMS
         on_edge_penalty=0.3,  # Penalty for bboxes on the edge of the image (in confidence is removed, 0.3 = 30%)
+        edge_threshold=0.05,  # Threshold for what is considered an edge of the window (0.05 = 5%)
     ):
+        self._validate_input(vars(self))
+
         self.model_path = os.path.abspath(model_path)
         self.model_name = Models.YOLO_NAS_L
         self.window_size = window_size
@@ -67,14 +70,25 @@ class SlidingWindowDetect:
         self.num_classes = num_classes
         self.on_edge_penalty = on_edge_penalty
 
-        assert 0 <= self.window_overlap < 1
+        self._edge_threshold = edge_threshold * window_size
+        self._overlap_size = int(self.window_size * self.window_overlap)
 
         # Print out the all local variables
-        print("Configuration:")
+        print("[Configuration]")
         for key, value in vars(self).items():
             print(f"{key}: {value}")
 
         self._get_model()
+
+    def _validate_input(self, vars):
+        assert os.path.exists(vars["model_path"])
+        assert vars["num_classes"] > 0
+        assert 0 <= vars["conf"] <= 1
+        assert 0 <= vars["iou"] <= 1
+        assert 0 <= vars["on_edge_penalty"] <= 1
+        assert 0 <= vars["edge_threshold"] <= 1
+        assert vars["window_size"] > 0
+        assert 0 <= vars["window_overlap"] < 1
 
     def _get_model(self):
         self.model = models.get(
@@ -133,7 +147,6 @@ class SlidingWindowDetect:
             nms_top_k=1000,
             max_predictions=300,
             nms_threshold=self.iou,
-            multi_label_per_box=False,
         )
         # convert to tensor first
         bboxes = torch.from_numpy(np.asarray(bboxes))  # [N, 4]
@@ -153,15 +166,11 @@ class SlidingWindowDetect:
         ## Finally, make B = 1 explicit
         scores = scores.unsqueeze(0)  # [1, N, C]
 
-        print(bboxes)
-        print(scores)
-
         # Get results formatted as list[tensor[N, 6]] with len = B
         # namely [x1,y1,x2,y2, conf, label_idx] x N
         result = nms.forward(((bboxes, scores), None), "")[0]
 
-        # for testing, calculate which bboxes were removed
-        print(f"Removed {bboxes.shape[1] - result.shape[0]} bboxes")
+        print(f"NMS Removed {bboxes.shape[1] - result.shape[0]} bboxes")
 
         # split the results into bboxes, scores, and labels
         bboxes = list(result[:, :4].numpy())
@@ -170,58 +179,102 @@ class SlidingWindowDetect:
 
         return bboxes, scores, labels
 
-    def _normalize_bbox(
+    def _norm_bbox(
         self, bbox: np.ndarray, i: float, j: float, shape, stride
     ) -> np.ndarray:
         x1 = j * stride
         y1 = i * stride
 
         bbox = bbox.copy()
-        on_edge = False
-        bbox[0] += x1
-        bbox[1] += y1
-        bbox[2] += x1
-        bbox[3] += y1
+        bbox[0] = max(bbox[0] + x1, 0)
+        bbox[1] = max(bbox[1] + y1, 0)
+        bbox[2] = min(bbox[2] + x1, shape[0])
+        bbox[3] = min(bbox[3] + y1, shape[1])
 
-        if bbox[0] <= 0 or bbox[1] <= 0 or bbox[2] >= shape[0] or bbox[3] >= shape[1]:
-            on_edge = True
+        return bbox
 
-        bbox[0] = max(bbox[0], 0)
-        bbox[1] = max(bbox[1], 0)
-        bbox[2] = min(bbox[2], shape[0])
-        bbox[3] = min(bbox[3], shape[1])
+    def _bbox_on_edge(self, bbox) -> bool:
+        # check if bbox is on the overlap
+        left = bbox[0] <= self._edge_threshold
+        top = bbox[1] <= self._edge_threshold
+        right = bbox[2] >= self.window_size - self._edge_threshold
+        bottom = bbox[3] >= self.window_size - self._edge_threshold
 
-        return bbox, on_edge
+        print(f"bbox is at top: {top}, bottom: {bottom}, left: {left}, right: {right}")
+        return (top, bottom, left, right)
+
+    def _get_shared_edges(self, i, j, shape):
+        # chek which side window shares with other windows
+        # top when i != 0 and bottom when i != shape[0] - 1
+        # left when j != 0 and right when j != shape[1] - 1
+        top = i > 0
+        bottom = i < shape[0] - 1
+        left = j > 0
+        right = j < shape[1] - 1
+
+        print(
+            f"window shares top: {top}, bottom: {bottom}, left: {left}, right: {right}"
+        )
+        return (top, bottom, left, right)
+
+    def _tuple_and(self, a: tuple[bool], b: tuple[bool]):
+        """computes the and of two tuples of bools.
+
+        Args:
+            a (tuple[bool]): tuple of bools of length n
+            b (tuple[bool]): tuple of bools of length n
+
+        Returns:
+            tuple[bool]: tuple where each element is the and of the corresponding elements in a and b
+
+        Raises:
+            AssertionError: if the length of a and b are not the same
+        """
+        assert len(a) == len(b)
+        return tuple([a[i] and b[i] for i in range(len(a))])
 
     def _process_window(
-        self, w, class_names, labels, confs, bboxes, i, j, image, stride
+        self, windows, class_names, labels, confs, bboxes, i, j, image, stride
     ):
+        w = windows[i, j]
         class_names.update(w.class_names)
         p = w.prediction
 
+        print("-" * 20)
+        print(f"Window {i}, {j} has {len(p.labels)} predictions")
+
+        shared_edges = self._get_shared_edges(i, j, windows.shape)
+
         for k in range(len(p.labels)):
             labels.append(w.class_names[int(p.labels[k])])
-            norm, on_edge = self._normalize_bbox(
-                p.bboxes_xyxy[k],
-                i,
-                j,
-                image.shape,
-                stride,
-            )
+            bbox = p.bboxes_xyxy[k]
+            # Check if the bbox is on the edge of the window
             conf = p.confidence[k]
-            if on_edge:
-                print(f"On edge: {w.class_names[int(p.labels[k])]}")
-                print(f"Confidence: {conf}")
+
+            print("-" * 10)
+            print(
+                f"k: {k} ({w.class_names[int(p.labels[k])]}), bbox: {bbox.tolist()}, conf: {conf}"
+            )
+            if any(self._tuple_and(shared_edges, self._bbox_on_edge(bbox))):
                 conf = conf - self.on_edge_penalty * conf
                 conf = max(conf, self.conf)
-                print(f"New confidence: {conf}")
+                print(f"On Edge! New after penalty: {conf}")
             confs.append(np.float32(conf))
-            bboxes.append(norm)
+
+            bboxes.append(
+                self._norm_bbox(
+                    bbox,
+                    i,
+                    j,
+                    image.shape,
+                    stride,
+                )
+            )
 
     def _combine_windows(
         self,
         image: np.ndarray,
-        windows: np.ndarray,
+        windows: np.ndarray,  # [N, N, ImageDetectionPrediction]
         stride: int,
         shape=None,
     ) -> ImageDetectionPrediction:
@@ -233,9 +286,10 @@ class SlidingWindowDetect:
         if shape and shape != image.shape:
             image = self._reshape_image(image, shape)
 
-        for i, j in np.ndindex(windows.shape[:2]):
+        print(f"shape: {windows.shape}")
+        for i, j in np.ndindex(windows.shape):
             self._process_window(
-                windows[i][j],
+                windows,
                 class_names,
                 labels,
                 confs,
@@ -248,7 +302,7 @@ class SlidingWindowDetect:
 
         class_names = self._update_labels(class_names, labels)
 
-        # bboxes, confs, labels = self._nms(bboxes, confs, labels, self.num_classes)
+        bboxes, confs, labels = self._nms(bboxes, confs, labels, self.num_classes)
 
         pred = self._create_prediction(bboxes, confs, labels, image)
         return ImageDetectionPrediction(
@@ -295,7 +349,7 @@ class SlidingWindowDetect:
             # Reshape the array to (1, 1, window_size, window_size, 3)
             return np.reshape(image, (1, 1, *img_shape))
 
-        stride = int(self.window_size * (1 - self.window_overlap))
+        stride = self.window_size - self._overlap_size
 
         print(
             f"Getting windows  with size {self.window_size}px,"
