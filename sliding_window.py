@@ -8,6 +8,8 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
+import coco_evaluator as coco
+
 import numpy as np
 import torch
 from PIL import Image
@@ -21,8 +23,6 @@ from super_gradients.training.utils.predict import (  # noqa: E501
     DetectionPrediction,
     ImageDetectionPrediction,
 )
-from tqdm import tqdm
-from tqdm.contrib.logging import logging_redirect_tqdm
 
 from sliding_window_metrics import Metrics
 
@@ -196,10 +196,12 @@ class SlidingWindowDetect:
                 labels.append(int(line[0]))
                 boxes.append([float(x) for x in line[1:]])
         # Convert to NumPy arrays
+        self._original_ground_truth_boxes = np.array(boxes)
         self._ground_truth_boxes = np.array(boxes)
         self._ground_truth_labels = np.array(labels)
 
     def _convert_yolo_to_xyxy(self, boxes, img_shape):
+        SWLOG.debug("Converting YOLO format to x1,y1,x2,y2...")
         for i, box in enumerate(boxes):
             # Convert to x1,y1,x2,y2
             x, y, w, h = box
@@ -399,10 +401,7 @@ class SlidingWindowDetect:
             image = self._reshape_image(image, shape)
 
         SWLOG.debug(f"shape: {windows.shape}")
-        t = tqdm(total=windows.size, desc="Combining windows")
         for i, j in np.ndindex(windows.shape):
-            t.update(1)
-            t.set_postfix_str(f"Window {i}, {j}")
             self._process_window(
                 windows,
                 class_names,
@@ -639,7 +638,7 @@ class SlidingWindowDetect:
 
 def main():
     args = parse_args()
-    SWLOG.setLevel(args.loglevel)
+    SWLOG.setLevel(logging.DEBUG)
 
     sw = SlidingWindowDetect(
         model_path=args.model_path,
@@ -654,13 +653,35 @@ def main():
         dataset_yaml_path=args.dataset_yaml,
     )
 
-    pred = sw.detect(args.image_path)
+    img_pred = sw.detect(args.image_path)
 
-    sw.print_metrics(pred)
+    sw.print_metrics(img_pred)
 
-    SlidingWindowDetect.save_visualisation(pred)
+    pred_bboxes = coco.BoundingBox.from_image_detection_prediction("test", img_pred)
+
+    shape = (img_pred.image.shape[0], img_pred.image.shape[1])
+    gt_bboxes = coco.BoundingBox.from_list(
+        "test",
+        sw._ground_truth_labels,
+        sw._original_ground_truth_boxes,
+        type_coordinates=coco.CoordinatesType.RELATIVE,
+        img_size=shape,
+        bb_type=coco.BBType.GROUND_TRUTH,
+        bb_format=coco.BBFormat.YOLO,
+    )
+
+    m = coco.get_coco_metrics(gt_bboxes, pred_bboxes)
+
+    SWLOG.info("COCO METRICS")
+    for k, v in m.items():
+        SWLOG.info(f"{k}: {v}")
+
+    s = coco.get_coco_summary(gt_bboxes, pred_bboxes)
+    SWLOG.info("SUMMARY")
+    SWLOG.info(s)
+
+    SlidingWindowDetect.save_visualisation(img_pred)
 
 
 if __name__ == "__main__":
-    with logging_redirect_tqdm():
-        main()
+    main()
