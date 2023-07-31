@@ -194,7 +194,10 @@ class BoundingBox:
                 (self._x, self._x2, self._y, self._y2),
             )
 
-    def get_image_name(self):
+    def set_image_name(self, name):
+        self._image_name = name
+
+    def get_image_name(self) -> str:
         """Get the string that represents the image.
 
         Returns
@@ -232,6 +235,19 @@ class BoundingBox:
 
     def set_bb_type(self, bb_type):
         self._bb_type = bb_type
+
+    def set_image_size(self, size: tuple):
+        """Set the size of the image where the bounding box is represented.
+
+        Parameters
+        ----------
+        size : tuple
+            Image size in pixels in the format (width, height)
+
+        Added by Josh Bruegger 2023-07-30
+        """
+        self._width_img = size[0]
+        self._height_img = size[1]
 
     def get_class_id(self):
         """Get the class of the object the bounding box represents.
@@ -312,9 +328,9 @@ class BoundingBox:
             True if both bounding boxes have the same coordinates, otherwise False.
         """
         det1BB = det1.getAbsoluteBoundingBox()
-        det1img_size = det1.getImageSize()
+        det1img_size = det1.get_image_size()
         det2BB = det2.getAbsoluteBoundingBox()
-        det2img_size = det2.getImageSize()
+        det2img_size = det2.get_image_size()
 
         if (
             det1.get_class_id() == det2.get_class_id()
@@ -329,8 +345,8 @@ class BoundingBox:
             return True
         return False
 
-    @staticmethod
-    def clone(bounding_box):
+    @classmethod
+    def clone(cls, bounding_box: "BoundingBox"):
         """Static function to clone a given bounding box.
 
         Parameters
@@ -342,23 +358,20 @@ class BoundingBox:
         -------
         BoundingBox
             Cloned BoundingBox object.
+
+        Fixed by Josh Bruegger 2023-07-30
         """
         absBB = bounding_box.get_absolute_bounding_box(format=BBFormat.XYWH)
-        # return (self._x,self._y,self._x2,self._y2)
-        new_bounding_box = BoundingBox(
+        return cls(
             bounding_box.get_image_name(),
-            bounding_box.get_class_id(),
-            absBB[0],
-            absBB[1],
-            absBB[2],
-            absBB[3],
-            type_coordinates=bounding_box.getCoordinatesType(),
-            img_size=bounding_box.getImageSize(),
-            bb_type=bounding_box.getbb_type(),
-            confidence=bounding_box.getConfidence(),
+            class_id=bounding_box.get_class_id(),
+            coordinates=absBB,
+            type_coordinates=CoordinatesType.ABSOLUTE,
+            img_size=bounding_box.get_image_size(),
+            bb_type=bounding_box.get_bb_type(),
+            confidence=bounding_box.get_confidence(),
             format=BBFormat.XYWH,
         )
-        return new_bounding_box
 
     @staticmethod
     def iou(boxA, boxB):

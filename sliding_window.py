@@ -9,24 +9,23 @@ from dataclasses import dataclass
 from typing import Optional
 
 import coco_evaluator as coco
-
 import numpy as np
 import torch
 from PIL import Image
 from psd_tools import PSDImage
 from super_gradients.common.object_names import Models
 from super_gradients.training import models
-from super_gradients.training.models.detection_models.pp_yolo_e.post_prediction_callback import (
-    PPYoloEPostPredictionCallback,  # noqa: E501
-)
+from super_gradients.training.models.detection_models.pp_yolo_e.post_prediction_callback import PPYoloEPostPredictionCallback  # noqa: E501; noqa: E501
 from super_gradients.training.utils.predict import (  # noqa: E501
     DetectionPrediction,
     ImageDetectionPrediction,
 )
 
-from sliding_window_metrics import Metrics
-
 SWLOG = logging.getLogger("SlidingWindow")
+handler = logging.StreamHandler()
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+handler.setFormatter(formatter)
+SWLOG.addHandler(handler)
 
 os.environ["CUDA_LAUNCH_BLOCKINGs"] = "1"
 
@@ -195,21 +194,42 @@ class SlidingWindowDetect:
                 line = line.strip().split(" ")
                 labels.append(int(line[0]))
                 boxes.append([float(x) for x in line[1:]])
-        # Convert to NumPy arrays
-        self._original_ground_truth_boxes = np.array(boxes)
-        self._ground_truth_boxes = np.array(boxes)
-        self._ground_truth_labels = np.array(labels)
+        self._rel_gt_boxes = np.array(boxes)
+        self._gt_labels = np.array(labels)
 
-    def _convert_yolo_to_xyxy(self, boxes, img_shape):
-        SWLOG.debug("Converting YOLO format to x1,y1,x2,y2...")
-        for i, box in enumerate(boxes):
-            # Convert to x1,y1,x2,y2
-            x, y, w, h = box
-            x1 = int((x - w / 2) * img_shape[1])
-            x2 = int((x + w / 2) * img_shape[1])
-            y1 = int((y - h / 2) * img_shape[0])
-            y2 = int((y + h / 2) * img_shape[0])
-            boxes[i] = np.array([x1, y1, x2, y2])
+    def _set_coco_bboxes(self, img_shape):
+        self._coco_gt_bboxes = coco.BoundingBox.from_list(
+            "img",
+            self._gt_labels,
+            self._rel_gt_boxes,
+            type_coordinates=coco.CoordinatesType.RELATIVE,
+            img_size=img_shape[:2],
+            bb_type=coco.BBType.GROUND_TRUTH,
+            bb_format=coco.BBFormat.YOLO,
+        )
+        for i, b in enumerate(self._coco_gt_bboxes):
+            x, y, w, h = (
+                self._rel_gt_boxes[i][0],
+                self._rel_gt_boxes[i][1],
+                self._rel_gt_boxes[i][2],
+                self._rel_gt_boxes[i][3],
+            )
+            # Convert to xyx2y2
+            x1 = (x - w / 2) * img_shape[0]
+            y1 = (y - h / 2) * img_shape[1]
+            x2 = (x + w / 2) * img_shape[0]
+            y2 = (y + h / 2) * img_shape[1]
+            SWLOG.debug(f"x1: {x1}, y1: {y1}, x2: {x2}, y2: {y2}")
+            SWLOG.debug(f"IN BOX: {self._rel_gt_boxes[i]}")
+            SWLOG.debug(
+                f"OUT bbox: {b.get_absolute_bounding_box(format=coco.BBFormat.XYX2Y2)}"
+            )
+            SWLOG.debug(f"IN LABEL: {self._gt_labels[i]}")
+            SWLOG.debug(f"OUT LABEL: {b.get_class_id()}")
+            if self._gt_labels[i] != b.get_class_id():
+                SWLOG.warning(
+                    f"Label mismatch: {self._gt_labels[i]} != {b.get_class_id()}"
+                )
 
     def _nms(
         self,
@@ -298,7 +318,7 @@ class SlidingWindowDetect:
         return (top, bottom, left, right)
 
     def _get_shared_edges(self, i, j, shape):
-        # chek which side _ground_truth_labelswindow shares with other windows
+        # check which side the window shares with other windows
         # top when i != 0 and bottom when i != shape[0] - 1
         # left when j != 0 and right when j != shape[1] - 1
         top = i > 0
@@ -319,7 +339,8 @@ class SlidingWindowDetect:
             b (tuple[bool]): tuple of bools of length n
 
         Returns:
-            tuple[bool]: tuple where each element is the and of the corresponding elements in a and b
+            tuple[bool]: tuple where each element is the AND of the
+            corresponding elements in a and b
 
         Raises:
             AssertionError: if the length of a and b are not the same
@@ -336,22 +357,11 @@ class SlidingWindowDetect:
         pred = win.prediction
 
         if self.ground_truth_path is not None:
-            # Get metrics for the window
-            metrics, values = Metrics.get_metrics(
-                pred, self._gt_windows[i][j], self._gt_labels[i][j]
+            metrics = self.get_metrics_imgpred(
+                win, name=f"{i}_{j}", gt=self._gt_windows_boxes[i][j]
             )
-
-            SWLOG.debug(f"Window {i}, {j} has {len(pred.labels)} predictions")
-            SWLOG.debug(
-                f"Window {i}, {j} has {len(self._gt_labels[i][j])} ground truth boxes"
-            )
-            tp, fp, fn = values
-            tp, fp, fn = tp[0.5]["all"], fp[0.5]["all"], fn[0.5]["all"]
-            SWLOG.debug(
-                f"Window {i}, {j} has {len(tp)} true positives, {len(fp)} false positives, and {len(fn)} false negatives"
-            )
-
-            Metrics.print_metrics(metrics)
+            SWLOG.debug(f"---METRICS FOR WINDOW {i}, {j}---")
+            self.print_metrics(metrics)
 
         SWLOG.debug("-" * 20)
         SWLOG.debug(f"Window {i}, {j} has {len(pred.labels)} predictions")
@@ -366,7 +376,8 @@ class SlidingWindowDetect:
 
             SWLOG.debug("-" * 10)
             SWLOG.debug(
-                f"k: {k} ({win.class_names[int(pred.labels[k])]}), bbox: {bbox.tolist()}, conf: {conf}"
+                f"k: {k} ({win.class_names[int(pred.labels[k])]}),"
+                f" bbox: {bbox.tolist()}, conf: {conf}"
             )
             if any(self._tuple_and(shared_edges, self._bbox_on_edge(bbox))):
                 conf = conf - self.on_edge_penalty * conf
@@ -457,10 +468,30 @@ class SlidingWindowDetect:
         preds = self.model.predict(w, conf=self.conf, iou=self.iou)
         preds.save("test_crops.png")
 
-        # Reshape back to 2D array of ImagePredictions
-        # TODO: no need to reshape, just add i and j to the array
+        # Get internal list of ImageDetectionPredictions
         preds = preds._images_prediction_lst
+
+        # Reshape back to 2D array of ImagePredictions
         preds = np.reshape(np.asarray(preds), windows.shape[:2])
+
+        # Compute metrics across all windows
+        if self.ground_truth_path is not None:
+            pred_coco_boxes = []
+            for i, j in np.ndindex(preds.shape[:2]):
+                pred_coco_boxes.extend(
+                    coco.BoundingBox.from_image_detection_prediction(
+                        f"{i}_{j}", preds[i, j]
+                    )
+                )
+            gt_coco_boxes = []
+            for i in self._gt_windows_boxes:
+                for j in i:
+                    gt_coco_boxes.extend(j)
+            metrics = self.get_metrics(gt_coco_boxes, pred_coco_boxes)
+
+            SWLOG.debug(f"---METRICS FOR ALL WINDOWS---")
+            self.print_metrics(metrics)
+
         return preds
 
     def _get_windows(self, image: np.ndarray) -> np.ndarray:
@@ -503,43 +534,67 @@ class SlidingWindowDetect:
             windows = windows[:, :-1, :, :, :]
 
         if self.ground_truth_path:
-            SWLOG.debug("Getting ground truth windows")
+            SWLOG.debug("Getting ground truth for windows")
             # If ground truth is provided, make ground truth windows
             # gt_windows [num_windows_x, num_windows_y, num_bboxes, x1, y1, x2, y2].
             # We still don't know which BB belongs to which window, so we'll do that
-            self._gt_windows = [
+            self._gt_windows_boxes = [
                 [[] for _ in range(windows.shape[1])] for _ in range(windows.shape[0])
             ]
             # gt_labels [num_windows_x, num_windows_y, num_bboxes, label]
-            self._gt_labels = [
-                [[] for _ in range(windows.shape[1])] for _ in range(windows.shape[0])
-            ]
-            for k, (bbox, label) in enumerate(
-                zip(self._ground_truth_boxes, self._ground_truth_labels)
-            ):
+            # self._gt_windows_boxes_labels = [
+            #     [[] for _ in range(windows.shape[1])] for _ in range(windows.shape[0])
+            # ]
+
+            for k, box in enumerate(self._coco_gt_bboxes):
+                SWLOG.debug(f"box pre-cloning: {box}")
+                box = coco.BoundingBox.clone(box)
+                SWLOG.debug(box)
+                bbox: tuple = box.get_absolute_bounding_box(format=coco.BBFormat.XYX2Y2)
+                SWLOG.debug(f"bbox: {bbox}")
+                label = box.get_class_id()
+                SWLOG.debug(f"label: {label}")
+
                 num_windows = 0
                 for i, j in np.ndindex(windows.shape[:2]):
+                    SWLOG.debug(f"i: {i}, j: {j}")
                     # for every window, get the relative window version of the bbox
                     rel_bbox = self._image_to_window_bbox(bbox, i, j, stride)
+                    SWLOG.debug(f"rel_bbox: {rel_bbox}")
                     window_bbox = np.asarray([0, 0, self.window_size, self.window_size])
-                    # If bbox is not out of bounds of the window with minimum 10% overlap
+                    # If bbox is not out of bounds of the
+                    # window with minimum 10% overlap
                     if self._box_in_window(rel_bbox, window_bbox):
-                        rel_bbox = np.asarray([
+                        rel_bbox = (
                             max(rel_bbox[0], 0),
                             max(rel_bbox[1], 0),
                             min(rel_bbox[2], self.window_size),
                             min(rel_bbox[3], self.window_size),
-                        ])
-                        self._gt_windows[i][j].append(rel_bbox)
-                        self._gt_labels[i][j].append(label)
+                        )
+                        box.set_image_name(f"{i}_{j}")
+                        box.set_image_size((self.window_size, self.window_size))
+                        box.set_coordinates(
+                            rel_bbox, type_coordinates=coco.CoordinatesType.ABSOLUTE
+                        )
+                        self._gt_windows_boxes[i][j].append(box)
+                        # self._gt_windows_boxes_labels[i][j].append(label)
                         num_windows += 1
-                assert num_windows > 0, f"Could not find window for bbox {k}"
+                assert num_windows > 0, "Could not find window for bbox"
 
         return windows, stride
 
+    def _intersection(self, box1, box2):
+        x1, y1 = np.maximum(box1[:2], box2[:2])
+        x2, y2 = np.minimum(box1[2:], box2[2:])
+        return np.maximum(0, x2 - x1) * np.maximum(0, y2 - y1)
+
+    def _box_area(self, box):
+        return (box[2] - box[0]) * (box[3] - box[1])
+
     def _box_in_window(self, bbox, window, vis=0.1):
-        # Return true if the intersection of the bbox and window is at least vis of the bbox area
-        return Metrics.intersection(bbox, window) > vis * Metrics.box_area(bbox)
+        # Return true if the intersection of the
+        # bbox and window is at least vis of the bbox area
+        return self._intersection(bbox, window) > vis * self._box_area(bbox)
 
     def _image_to_window_bbox(self, bbox, i, j, stride):
         # Get the relative window version of the bbox
@@ -604,26 +659,106 @@ class SlidingWindowDetect:
             img = SlidingWindowDetect._resize_image(img, MAX_IMAGE_SIZE)
         img.save("test.png")
 
-    def print_metrics(self, pred):
-        pred = pred.prediction
-        metrics, values = Metrics.get_metrics(
-            pred, self._ground_truth_boxes, self._ground_truth_labels
-        )
-        SWLOG.debug("-" * 40)
-        SWLOG.debug("Metrics")
-        SWLOG.debug("-" * 40)
-        Metrics.print_metrics(metrics)
+    def _process_metrics(self, metrics):
+        # add some extra metrics
+        for _, metric in metrics.items():
+            if metric["TP"] is None:
+                continue
+            num = len(metric["precision"])
+            metric["num_predictions"] = num
+            # total positives is the number of ground truth bboxes
+            metric["num_ground_truths"] = metric["total positives"]
+            metric["FN"] = metric["total positives"] - metric["TP"]
+            metric["accuracy"] = metric["TP"] / num if num > 0 else None
+            metric["f1"] = (
+                (
+                    2
+                    * metric["precision"][-1]
+                    * metric["recall"][-1]
+                    / (metric["precision"][-1] + metric["recall"][-1])
+                )
+                if num > 0 and metric["precision"][-1] + metric["recall"][-1] > 0
+                else None
+            )
+
+    def get_metrics(self, gt, pred_bboxes):
+        metrics = coco.get_coco_metrics(gt, pred_bboxes)
+        # { class_id : { class, precision, recall, AP, interpolated precision,
+        #               interpolated recall, total positives, TP, FP }
+        # }
+        self._process_metrics(metrics)
+        summary = coco.get_coco_summary(gt, pred_bboxes)
+        # { AP, AP50, AP75, APsmall, APmedium, APlarge, AR1,
+        #   AR10, AR100, ARsmall, ARmedium, ARlarge }
+        return {
+            "by_class": metrics,
+            "summary": summary,
+        }
+
+    def get_metrics_imgpred(self, img_pred, name="img", gt=None):
+        """Get metrics for a single image prediction
+
+        Args:
+            img_pred (ImageDetectionPrediction): The image prediction
+
+        Returns:
+            dict: A dictionary with the following format:
+                    'by_class':
+                        (for every class)
+                        {Class ID}:
+                            'class', 'precision', 'recall', 'AP', s'interpolated precision','interpolated recall', 'total positives', 'TP', 'FP', 'f1', 'accuracy'
+                    'summary':
+                        'AP', 'AP50', 'AP75', 'APsmall', 'APmedium', 'APlarge', 'AR1', 'AR10', 'AR100', 'ARsmall', 'ARmedium', 'ARlarge'}
+
+        """  # noqa: E501
+        if gt is None:
+            gt = self._coco_gt_bboxes
+        assert gt is not None, "No coco ground truth set! Are they set?"
+
+        pred_bboxes = coco.BoundingBox.from_image_detection_prediction(name, img_pred)
+
+        return self.get_metrics(gt, pred_bboxes)
+
+    def print_metrics(self, metrics):
+        metrics_to_skip = [
+            "interpolated precision",
+            "interpolated recall",
+            "total positives",
+            "APsmall",
+            "APmedium",
+            "APlarge",
+            "ARsmall",
+            "ARmedium",
+            "ARlarge",
+            "class",
+        ]
+
+        def print_value(k, v):
+            if k not in metrics_to_skip:
+                print(
+                    f"| {k}: {v[-1] if isinstance(v, np.ndarray) and len(v) > 0 else v}"
+                )
+
+        def print_title(title):
+            print("-" * 50)
+            print(f"| {title}")
+            print("-" * 50)
+
+        print_title("Summary")
+        for key, value in metrics["summary"].items():
+            print_value(key, value)
+        print_title("Metrics by Class")
+        for class_id, class_metrics in metrics["by_class"].items():
+            print(f"| Class ID: {class_id}")
+            for key, value in class_metrics.items():
+                print_value(key, value)
+            print("-" * 50)
 
     def detect(self, image: str):
         SWLOG.debug(f"Detecting {image}")
         image = self._image_from_path(image)
-        SWLOG.debug(f"Image shape: {image.shape}")
-        SWLOG.debug(f"Image size: {image.size}")
-        SWLOG.debug(f"Image dtype: {image.dtype}")
-        SWLOG.debug(f"Image max: {image.max()}")
-        SWLOG.debug(f"Image min: {image.min()}")
         if self.ground_truth_path:
-            self._convert_yolo_to_xyxy(self._ground_truth_boxes, image.shape)
+            self._set_coco_bboxes(image.shape)
         windows, stride = self._get_windows(image)
         SWLOG.debug(
             f"Number of windows: {windows.shape[0] * windows.shape[1]}"
@@ -654,32 +789,7 @@ def main():
     )
 
     img_pred = sw.detect(args.image_path)
-
-    sw.print_metrics(img_pred)
-
-    pred_bboxes = coco.BoundingBox.from_image_detection_prediction("test", img_pred)
-
-    shape = (img_pred.image.shape[0], img_pred.image.shape[1])
-    gt_bboxes = coco.BoundingBox.from_list(
-        "test",
-        sw._ground_truth_labels,
-        sw._original_ground_truth_boxes,
-        type_coordinates=coco.CoordinatesType.RELATIVE,
-        img_size=shape,
-        bb_type=coco.BBType.GROUND_TRUTH,
-        bb_format=coco.BBFormat.YOLO,
-    )
-
-    m = coco.get_coco_metrics(gt_bboxes, pred_bboxes)
-
-    SWLOG.info("COCO METRICS")
-    for k, v in m.items():
-        SWLOG.info(f"{k}: {v}")
-
-    s = coco.get_coco_summary(gt_bboxes, pred_bboxes)
-    SWLOG.info("SUMMARY")
-    SWLOG.info(s)
-
+    sw.print_metrics(sw.get_metrics_imgpred(img_pred))
     SlidingWindowDetect.save_visualisation(img_pred)
 
 
