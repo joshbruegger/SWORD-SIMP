@@ -4,8 +4,9 @@ from math import isclose
 from typing import Optional
 
 from .general_utils import (
-    convert_to_absolute_values,
+    xywh_to_xyxy,
     convert_to_relative_values,
+    rel_to_abs,
 )
 
 from .enumerators import BBFormat, BBType, CoordinatesType
@@ -65,7 +66,7 @@ class BoundingBox:
         self._class_id = class_id
         self._format = format
         if bb_type == BBType.DETECTED and confidence is None:
-            raise IOError(
+            raise ValueError(
                 "For bb_type='Detected', it is necessary to inform the confidence value."
             )
         self._bb_type = bb_type
@@ -77,7 +78,6 @@ class BoundingBox:
             self._width_img = img_size[0]
             self._height_img = img_size[1]
 
-        # If YOLO format (rel_x_center, rel_y_center, rel_width, rel_height), change it to absolute format (x,y,w,h)
         if format == BBFormat.YOLO:
             assert self._width_img is not None and self._height_img is not None
             self._format = BBFormat.XYWH
@@ -87,6 +87,7 @@ class BoundingBox:
             coordinates, img_size=img_size, type_coordinates=self._type_coordinates
         )
 
+    # Fixed by Josh Bruegger
     def set_coordinates(self, coordinates, type_coordinates, img_size=None):
         self._type_coordinates = type_coordinates
         if type_coordinates == CoordinatesType.RELATIVE and img_size is None:
@@ -95,45 +96,47 @@ class BoundingBox:
             )
 
         # If relative coordinates, convert to absolute values
-        # For relative coords: (x,y,w,h)=(X_center/img_width , Y_center/img_height)
         if type_coordinates == CoordinatesType.RELATIVE:
             self._width_img = img_size[0]
             self._height_img = img_size[1]
+
+            assert self._format in [
+                BBFormat.XYWH,
+                BBFormat.XYX2Y2,
+            ], "for relative coordinates, the format must be XYWH or XYXY"
+
+            # Convert to absolute values
+            coordinates = rel_to_abs(coordinates, img_size)
+
             if self._format == BBFormat.XYWH:
-                (self._x, self._y, self._w, self._h) = convert_to_absolute_values(
-                    img_size, coordinates
-                )
-                self._x2 = self._w
-                self._y2 = self._h
-                self._w = self._x2 - self._x
-                self._h = self._y2 - self._y
-            elif self._format == BBFormat.XYX2Y2:
-                x1, y1, x2, y2 = coordinates
-                # Converting to absolute values
-                self._x = round(x1 * self._width_img)
-                self._x2 = round(x2 * self._width_img)
-                self._y = round(y1 * self._height_img)
-                self._y2 = round(y2 * self._height_img)
-                self._w = self._x2 - self._x
-                self._h = self._y2 - self._y
-            else:
-                raise IOError(
-                    "For relative coordinates, the format must be XYWH (x,y,width,height)"
-                )
-        # For absolute coords: (x,y,w,h)=real bb coords
-        else:
-            self._x = coordinates[0]
-            self._y = coordinates[1]
+                coordinates = xywh_to_xyxy(coordinates)
+
+            self._x, self._y, self._x2, self._y2 = coordinates
+            self._w = self._x2 - self._x
+            self._h = self._y2 - self._y
+
+        elif type_coordinates == CoordinatesType.ABSOLUTE:
             if self._format == BBFormat.XYWH:
-                self._w = coordinates[2]
                 self._h = coordinates[3]
+                self._w = coordinates[2]
+                self._y = coordinates[1] - self._h / 2.0
+                self._x = coordinates[0] - self._w / 2.0
                 self._x2 = self._x + self._w
                 self._y2 = self._y + self._h
-            else:  # self._format == BBFormat.XYX2Y2: <left> <top> <right> <bottom>.
+            elif self._format == BBFormat.XYX2Y2:  # <left> <top> <right> <bottom>.
+                self._x = coordinates[0]
+                self._y = coordinates[1]
                 self._x2 = coordinates[2]
                 self._y2 = coordinates[3]
                 self._w = self._x2 - self._x
                 self._h = self._y2 - self._y
+
+        else:
+            raise ValueError(
+                "Invalid type_coordinates."
+                "It must be CoordinatesType.ABSOLUTE or CoordinatesType.RELATIVE"
+            )
+
         # Convert all values to float
         self._x = float(self._x)
         self._y = float(self._y)
@@ -537,10 +540,7 @@ class BoundingBox:
         cls, image_name: str, image_detection_prediction
     ) -> list["BoundingBox"]:
         pred = image_detection_prediction.prediction
-        shape = (
-            image_detection_prediction.image.shape[0],
-            image_detection_prediction.image.shape[1],
-        )
+        shape = image_detection_prediction.image.shape[:2][::-1]
 
         return cls.from_list(
             image_name,

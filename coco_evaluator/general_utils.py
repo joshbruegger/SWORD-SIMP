@@ -70,17 +70,33 @@ def convert_to_relative_values(size, box):
     return (x, y, w, h)
 
 
-# size => (width, height) of the image
 # box => (centerX, centerY, w, h) of the bounding box relative to the image
-def convert_to_absolute_values(size, box):
-    w_box = size[0] * box[2]
-    h_box = size[1] * box[3]
+def xywh_to_xyxy(box):
+    x1 = box[0] - box[2] / 2.0
+    y1 = box[1] - box[3] / 2.0
+    x2 = box[0] + box[2] / 2.0
+    y2 = box[1] + box[3] / 2.0
+    return x1, y1, x2, y2
 
-    x1 = (float(box[0]) * float(size[0])) - (w_box / 2)
-    y1 = (float(box[1]) * float(size[1])) - (h_box / 2)
-    x2 = x1 + w_box
-    y2 = y1 + h_box
-    return (round(x1), round(y1), round(x2), round(y2))
+
+# box => (x1, y1, x2, y2) of the bounding box relative to the image
+def rel_to_abs(box: tuple, size: tuple):
+    """Converts a bounding box from relative coordinates to absolute coordinates.
+
+    Args:
+        box (tuple): coordinates of the bounding box in relative coordinates in the format (x1, y1, x2, y2)
+        size (tuple): size of the image in the format (width, height)
+
+    Returns:
+        tuple: coordinates of the bounding box in absolute coordinates in the format (x1, y1, x2, y2)
+
+    By Josh Bruegger
+    """
+    x1 = box[0] * size[0]
+    y1 = box[1] * size[1]
+    x2 = box[2] * size[0]
+    y2 = box[3] * size[1]
+    return x1, y1, x2, y2
 
 
 def add_bb_into_image(image, bb, color=(255, 0, 0), thickness=2, label=None):
