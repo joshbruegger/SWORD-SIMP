@@ -4,7 +4,7 @@
 #SBATCH --output=train-%j.log
 #SBATCH --time=04:00:00
 #SBATCH --mem=16G
-#SBATCH --ntasks=3
+#SBATCH --ntasks=9
 
 # Help function
 function usage {
@@ -48,6 +48,6 @@ SCRATCH=/scratch/$USER
 chmod +x $WORKDIR/setup_env.sh
 source $WORKDIR/setup_env.sh
 
-python3 -u train.py -d $SCRATCH/dataset -w 3 -e $EPOCHS -b $BATCH_SIZE -r $RESUBMITS
+python3 -u train.py -d $SCRATCH/dataset -w 8 -e $EPOCHS -b $BATCH_SIZE -r $RESUBMITS
 
 deactivate
