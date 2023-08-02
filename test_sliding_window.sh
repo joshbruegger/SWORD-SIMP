@@ -1,8 +1,8 @@
 #!/bin/bash
-#SBATCH --job-name=theiss_test_sliding_window
-#SBATCH --output=test_siding_window-%j.log
+#SBATCH --job-name=sliding_window
+#SBATCH --output=sliding_window-%j.log
 #SBATCH --gpus-per-node=1
-#SBATCH --time=00:06:00
+#SBATCH --time=00:10:00
 #SBATCH --mem=20G
 
 source setup_env.sh
