@@ -14,10 +14,11 @@ from super_gradients.training.dataloaders.dataloaders import (
     coco_detection_yolo_format_train,
     coco_detection_yolo_format_val,
 )
+from super_gradients.common.object_names import LRWarmups
 from super_gradients.training.losses import PPYoloELoss
 from super_gradients.training.metrics import DetectionMetrics_050
 from super_gradients.training.models.detection_models.pp_yolo_e import PPYoloEPostPredictionCallback
-from super_gradients.training.utils.callbacks import Callback, PhaseContext
+from super_gradients.training.utils.callbacks import Callback, PhaseContext, DetectionVisualizationCallback, Phase
 from super_gradients.common.environment.ddp_utils import multi_process_safe
 
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
@@ -163,14 +164,28 @@ def train(config):
     train_params = {
         "phase_callbacks": [AvoidExceedingWalltimeCallback(config)],
         "resume": should_resume,
-        "average_best_models": True,
-        "warmup_mode": "linear_epoch_step",
-        "warmup_initial_lr": 1e-6,
-        "lr_warmup_epochs": 3,
-        "initial_lr": 5e-4,
+        "save_ckpt_epoch_list": [49],
+        # "average_best_models": True, # Set to True for round 0-100, 100-200
+        "average_best_models": False,
+        # "warmup_mode": "linear_epoch_step", # ORIGINAL (ROUND ONE) 0-100
+        # "warmup_mode": None, # round 100-200 resumecosine
+        "warmup_mode": "linear_epoch_step",  # round 100-200 cyclic
+        # "lr_warmup_epochs": 3, # ORIGINAL (ROUND ONE)
+        "lr_warmup_epochs": 0,  # round 100-200 cyclic
+        # "warmup_initial_lr": 1e-6, # ORIGINAL (ROUND ONE)
+        # "warmup_initial_lr": 5e-4 / 2,  # round 100-200 cyclic
+        # "warmup_initial_lr": 5e-4 / 3,  # round 200-300 cyclic
+        # "warmup_initial_lr": 5e-4 / 4,  # round 300-400 cyclic
+        "warmup_initial_lr": 5e-4 / 5,  # round 400-500 cyclic
+        # "initial_lr": 5e-4, # ORIGINAL (ROUND ONE)
+        # "initial_lr": 5e-5,  # roind 100-200 resumecosine
+        # "initial_lr": 5e-4 / 2,  # round 100-200 cyclic
+        # "initial_lr": 5e-4 / 3,  # round 200-300 cyclic
+        # "initial_lr": 5e-4 / 4,  # round 300-400 cyclic
+        "initial_lr": 5e-4 / 5,  # round 400-500 cyclic
         "lr_mode": "cosine",
         "cosine_final_lr_ratio": 0.1,
-        "optimizer": optim.RAdam,  # originally "Adam"
+        "optimizer": optim.RAdam,
         "optimizer_params": {"weight_decay": 0.0001},
         "zero_weight_decay_on_bias_and_bn": True,
         "ema": True,
