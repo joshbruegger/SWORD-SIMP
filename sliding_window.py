@@ -3,11 +3,11 @@
 # https://colab.research.google.com/drive/1q0RmeVRzLwRXW-h9dPFSOchwJkThUy6d#scrollTo=m0SkK3bjMOqH
 
 import argparse
+import copy
 import logging
 import os
 from dataclasses import dataclass
 from typing import Optional
-import copy
 
 import coco_evaluator as coco
 import numpy as np
@@ -16,11 +16,12 @@ from PIL import Image
 from psd_tools import PSDImage
 from super_gradients.common.object_names import Models
 from super_gradients.training import models
-from super_gradients.training.models.detection_models.pp_yolo_e.post_prediction_callback import PPYoloEPostPredictionCallback  # noqa: E501; noqa: E501
 from super_gradients.training.utils.predict import (  # noqa: E501
     DetectionPrediction,
     ImageDetectionPrediction,
 )
+from torchvision.ops.boxes import batched_nms as torch_batched_nms
+from torchvision.ops.boxes import nms as torch_nms
 
 SWLOG = logging.getLogger("SlidingWindow")
 handler = logging.StreamHandler()
@@ -39,8 +40,9 @@ class SlidingWindowDetect:
     DEFAULT_CONF = {
         "window_size": 640,
         "window_overlap": 0.3,
-        "conf": 0.4,
-        "iou": 0.7,
+        "conf": 0.6,
+        "iou": 0.5,
+        "iou_class_agnostic": 0.8,
         "on_edge_penalty": 0.3,
         "edge_threshold": 0.05,
     }
@@ -56,8 +58,11 @@ class SlidingWindowDetect:
     # Confidence threshold for predictions, below which predictions are discarded
     conf: Optional[float] = None
 
-    # Max overlap between bboxes before one is removed during NMS
+    # discards all overlapping boxes of same class with IoU > iou during NMS
     iou: Optional[float] = None
+
+    # discards all overlapping boxes with IoU > iou during NMS
+    iou_class_agnostic: Optional[float] = None
 
     # Penalty for bboxes on the edge of the image (in confidence is removed, 0.3 = 30%).
     # Scores after penalty don't go below conf.
@@ -66,7 +71,7 @@ class SlidingWindowDetect:
     # Threshold for what is considered an edge of the window (0.05 = 5%)
     edge_threshold: Optional[float] = None
 
-    debug: bool = False
+    debug: bool = True
 
     def __post_init__(self):
         self._set_defaults()
@@ -76,6 +81,7 @@ class SlidingWindowDetect:
         self.model_name = Models.YOLO_NAS_L
         self._edge_threshold = self.edge_threshold * self.window_size
         self._overlap_size = int(self.window_size * self.window_overlap)
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         if self.ground_truth_path is not None:
             self.ground_truth_path = os.path.abspath(self.ground_truth_path)
@@ -102,6 +108,8 @@ class SlidingWindowDetect:
         assert vars["num_classes"] > 0
         assert 0 <= vars["conf"] <= 1
         assert 0 <= vars["iou"] <= 1
+        assert 0 <= vars["iou_class_agnostic"] <= 1
+        assert vars["iou"] <= vars["iou_class_agnostic"]
         assert 0 <= vars["on_edge_penalty"] <= 1
         assert 0 <= vars["edge_threshold"] <= 1
         assert vars["window_size"] > 0
@@ -122,7 +130,6 @@ class SlidingWindowDetect:
             checkpoint_path=self.model_path,
             num_classes=self.num_classes,
         )
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.model = self.model.to(self.device)
 
     def _load_dataset_yaml(self):
@@ -188,7 +195,6 @@ class SlidingWindowDetect:
         bboxes: list[np.ndarray],
         scores: list[float],
         labels: list[int],
-        num_classes: int,
     ) -> tuple[list[np.ndarray], list[float], list[int]]:
         """Performs non-maximum suppression on the given bboxes, scores, and labels.
 
@@ -199,50 +205,46 @@ class SlidingWindowDetect:
             in the same order as bboxes.
             labels (list[int]): A list of label indexes for each bbox,
             in the same order as bboxes.
-            num_classes (int): The number of classes
 
         Returns:
             tuple[list[np.ndarray], list[float], list[int]]:
             A tuple (bboxes, scores, labels) with the same format as the input.
         """
 
-        nms = PPYoloEPostPredictionCallback(
-            score_threshold=self.conf,
-            nms_top_k=1000,
-            max_predictions=300,
-            nms_threshold=self.iou,
-            multi_label_per_box=False,
-        )
+        SWLOG.debug("Performing NMS...")
         # convert to tensor first
-        bboxes = torch.from_numpy(np.asarray(bboxes))  # [N, 4]
-        scores = torch.from_numpy(np.asarray(scores))  # [N]
-        labels = torch.from_numpy(np.asarray(labels))  # [N]
+        bboxes = torch.from_numpy(np.asarray(bboxes)).to(self.device)  # [N, 4]
+        scores = torch.from_numpy(np.asarray(scores)).to(self.device)  # [N]
+        labels = torch.from_numpy(np.asarray(labels)).to(self.device)  # [N]
 
-        # convert boxes to torch tensor shaped [B, N, 4]
-        # (B is one, only one BBox per anchor)
-        bboxes = bboxes.unsqueeze(0)  # [1, N, 4]
+        to_keep = torch_batched_nms(
+            boxes=bboxes,
+            scores=scores,
+            idxs=labels,
+            iou_threshold=self.iou,
+        )
 
-        # convert scores and labels to torch tensor shaped [B, N, C]
-        ## Make labels into a one-hot vector
-        labels = torch.nn.functional.one_hot(labels, num_classes=num_classes)  # [N, C]
-        ## By multiplying every 1 in labels with the confidence score
-        ## Get get a single one-hot vector to represent both labels and scores
-        scores = (labels.T * scores).T
-        ## Finally, make B = 1 explicit
-        scores = scores.unsqueeze(0)  # [1, N, C]
+        SWLOG.info(
+            f"Class-specific NMS removed {bboxes.shape[0] - to_keep.shape[0]} bboxes"
+        )
+        bboxes = bboxes[to_keep, :]
+        scores = scores[to_keep]
+        labels = labels[to_keep]
 
-        # Get results formatted as list[tensor[N, 6]] with len = B
-        # namely [x1,y1,x2,y2, conf, label_idx] x N
-        result = nms.forward(((bboxes, scores), None), "")[0]
+        to_keep = torch_nms(bboxes, scores, self.iou_class_agnostic)
+        SWLOG.info(
+            f"Class-agnostic NMS removed {bboxes.shape[0] - to_keep.shape[0]} bboxes"
+        )
 
-        SWLOG.info(f"NMS Removed {bboxes.shape[1] - result.shape[0]} bboxes")
+        bboxes = bboxes[to_keep, :]
+        scores = scores[to_keep]
+        labels = labels[to_keep]
 
-        # split the results into bboxes, scores, and labels
-        bboxes = list(result[:, :4].numpy())
-        scores = result[:, 4].numpy().tolist()
-        labels = result[:, 5].numpy().astype(int).tolist()
-
-        return bboxes, scores, labels
+        return (
+            list(bboxes.to("cpu").numpy()),
+            scores.to("cpu").numpy().tolist(),
+            labels.to("cpu").numpy().astype(int).tolist(),
+        )
 
     def _norm_bbox(
         self, bbox: np.ndarray, i: float, j: float, shape, stride
@@ -304,9 +306,9 @@ class SlidingWindowDetect:
             metrics = self.get_metrics_imgpred(
                 win, name=f"{i}_{j}", gt=self._gt_windows_boxes[i][j]
             )
-            ap = metrics["summary"]["AP"]
+            ap = metrics["summary"]["AP50"]
             if not np.isnan(ap):
-                SWLOG.debug(f"AP for window {i}, {j}: {ap}")
+                SWLOG.debug(f"AP50 for window {i}, {j}: {ap}")
 
         shared_edges = self._get_shared_edges(i, j, windows.shape)
 
@@ -363,7 +365,15 @@ class SlidingWindowDetect:
 
         class_names = self._update_labels(class_names, labels)
 
-        bboxes, confs, labels = self._nms(bboxes, confs, labels, self.num_classes)
+        # if self.debug:
+        #     SWLOG.debug("Saving before nms")
+        #     pred = self._create_prediction(bboxes, confs, labels, image)
+        #     img = ImageDetectionPrediction(
+        #         image=image, prediction=pred, class_names=class_names
+        #     )
+        #     self.save_visualisation(img, "before_nms", save_gt=False)
+
+        bboxes, confs, labels = self._nms(bboxes, confs, labels)
 
         pred = self._create_prediction(bboxes, confs, labels, image)
         return ImageDetectionPrediction(
@@ -382,6 +392,7 @@ class SlidingWindowDetect:
                 len(class_names.difference(self._gt_classes)) == 0
             ), "Some classes in the ground truth are not in the model's classes"
             class_names = self._gt_classes
+            SWLOG.debug("Using ground truth classes")
         else:
             class_names = list(class_names)
         for i in range(len(labels)):
@@ -407,9 +418,6 @@ class SlidingWindowDetect:
 
         preds = self.model.predict(w, conf=self.conf, iou=self.iou)
 
-        if self.debug:
-            preds.save("windows_preds")
-
         # Get internal list of ImageDetectionPredictions
         preds = preds._images_prediction_lst
 
@@ -418,8 +426,12 @@ class SlidingWindowDetect:
 
         # Compute metrics across all windows
         if self.ground_truth_path is not None:
-            # If there is a ground truth, make sure the labels indexes match the ground truth
+            SWLOG.debug(
+                "Matching indexes to gt indexes and computing metrics for all windows"
+            )
 
+            # If there is a ground truth, make sure the
+            # label indexes match the ground truth
             pred_coco_boxes = []
             for i, j in np.ndindex(preds.shape[:2]):
                 # Get the prediction label_idxs and classes
@@ -434,17 +446,24 @@ class SlidingWindowDetect:
                 p_label_idxs = [self._gt_classes.index(c) for c in p_label_classes]
                 p.prediction.labels = np.asarray(p_label_idxs)
 
+                # if self.debug and len(p_label_idxs) > 0:
+                #     SWLOG.debug(f"Saving pred_{i}_{j}.png")
+                #     os.makedirs("patches", exist_ok=True)
+                #     p.save(f"patches/pred_{i}_{j}.png")
+
                 img_coco_boxes = coco.BoundingBox.from_image_detection_prediction(
                     f"{i}_{j}", p
                 )
                 pred_coco_boxes.extend(img_coco_boxes)
+
+            # Unroll the ground truth boxes
             gt_coco_boxes = []
             for i in self._gt_windows_boxes:
                 for j in i:
                     gt_coco_boxes.extend(j)
             metrics = self.get_metrics(gt_coco_boxes, pred_coco_boxes)
 
-            SWLOG.debug(f"---METRICS FOR ALL WINDOWS---")
+            SWLOG.debug("---METRICS FOR ALL WINDOWS---")
             self.print_metrics(metrics)
 
         return preds
@@ -462,7 +481,7 @@ class SlidingWindowDetect:
 
         SWLOG.debug(
             f"Getting windows with size {self.window_size}px,"
-            f"overlapping by {stride}px"
+            f"Moving by {stride}px and overlapping by {self._overlap_size}px"
         )
 
         pad_x = self.window_size - (img_shape[0] % stride)
@@ -490,26 +509,21 @@ class SlidingWindowDetect:
 
         if self.ground_truth_path is not None:
             SWLOG.debug("Getting ground truth for windows")
-            # If ground truth is provided, make ground truth windows
-            # gt_windows [num_windows_x, num_windows_y, num_bboxes, x1, y1, x2, y2].
-            # We still don't know which BB belongs to which window, so we'll do that
+            # If ground truth is provided, make ground truths for the windows
+            self._gt_windows_boxes: list[list[list[coco.BoundingBox]]]
             self._gt_windows_boxes = [
                 [[] for _ in range(windows.shape[1])] for _ in range(windows.shape[0])
             ]
-            # gt_labels [num_windows_x, num_windows_y, num_bboxes, label]
-            # self._gt_windows_boxes_labels = [
-            #     [[] for _ in range(windows.shape[1])] for _ in range(windows.shape[0])
-            # ]
 
             for k, box in enumerate(self._coco_gt_bboxes):
-                box = coco.BoundingBox.clone(box)
                 bbox: tuple = box.get_absolute_bounding_box(format=coco.BBFormat.XYX2Y2)
 
                 num_windows = 0
                 for i, j in np.ndindex(windows.shape[:2]):
                     # for every window, get the relative window version of the bbox
-                    rel_bbox = self._image_to_window_bbox(bbox, i, j, stride)
-                    window_bbox = np.asarray([0, 0, self.window_size, self.window_size])
+                    rel_bbox = self._image_to_window_bbox(bbox, j, i, stride)
+                    window_bbox = (0, 0, self.window_size, self.window_size)
+                    # np.asarray([0, 0, self.window_size, self.window_size])
                     # If bbox is not out of bounds of the
                     # window with minimum 10% overlap
                     if self._box_in_window(rel_bbox, window_bbox):
@@ -519,40 +533,55 @@ class SlidingWindowDetect:
                             min(rel_bbox[2], self.window_size),
                             min(rel_bbox[3], self.window_size),
                         )
+                        box: coco.BoundingBox = coco.BoundingBox.clone(box)
                         box.set_image_name(f"{i}_{j}")
                         box.set_image_size((self.window_size, self.window_size))
                         box.set_coordinates(
-                            rel_bbox, type_coordinates=coco.CoordinatesType.ABSOLUTE
+                            rel_bbox,
+                            coco.CoordinatesType.ABSOLUTE,
+                            coco.BBFormat.XYX2Y2,
                         )
+
                         self._gt_windows_boxes[i][j].append(box)
-                        # self._gt_windows_boxes_labels[i][j].append(label)
                         num_windows += 1
+                        if num_windows >= 4:
+                            #! This assumes that the windows are
+                            #! bigger or equal than the bbox
+                            break
                 assert num_windows > 0, "Could not find window for bbox"
 
         return windows, stride
 
-    def _intersection(self, box1, box2):
-        x1, y1 = np.maximum(box1[:2], box2[:2])
-        x2, y2 = np.minimum(box1[2:], box2[2:])
-        return np.maximum(0, x2 - x1) * np.maximum(0, y2 - y1)
+    def _intersection(
+        self,
+        box1: tuple[float, float, float, float],
+        box2: tuple[float, float, float, float],
+    ):
+        x1 = max(box1[0], box2[0])
+        y1 = max(box1[1], box2[1])
+        x2 = min(box1[2], box2[2])
+        y2 = min(box1[3], box2[3])
+        return self._box_area((x1, y1, x2, y2))
+        # x1, y1 = np.maximum(box1[:2], box2[:2])
+        # x2, y2 = np.minimum(box1[2:], box2[2:])
+        # return np.maximum(0, x2 - x1) * np.maximum(0, y2 - y1)
 
-    def _box_area(self, box):
-        return (box[2] - box[0]) * (box[3] - box[1])
+    def _box_area(self, box: tuple[float, float, float, float]):
+        return max(0, box[2] - box[0]) * max(0, box[3] - box[1])
 
     def _box_in_window(self, bbox, window, vis=0.1):
         # Return true if the intersection of the
         # bbox and window is at least vis of the bbox area
-        return self._intersection(bbox, window) > vis * self._box_area(bbox)
+        return self._intersection(bbox, window) >= vis * self._box_area(bbox)
 
     def _image_to_window_bbox(self, bbox, i, j, stride):
         # Get the relative window version of the bbox
-        window_bbox = np.asarray([
+        return (
             bbox[0] - i * stride,
             bbox[1] - j * stride,
             bbox[2] - i * stride,
             bbox[3] - j * stride,
-        ])
-        return window_bbox
+        )
 
     def _image_from_path(self, image: str) -> np.ndarray:
         SWLOG.debug(f"Loading {image}")
@@ -578,19 +607,24 @@ class SlidingWindowDetect:
 
         return img
 
-    def save_visualisation(self, img):
-        self._save_visualisation(img, title="prediction")
-        if self.ground_truth_path is not None:
-            self._save_visualisation(self._gt_image_det, title="ground_truth")
+    def save_visualisation(self, img, name="", save_gt=True):
+        self._save_visualisation(img, title=f"{name}_prediction")
+        if save_gt and self.ground_truth_path is not None:
+            self._save_visualisation(
+                self._gt_image_det, title=f"{name}_ground_truth", show_conf=False
+            )
 
     def _save_visualisation(
-        self, img: ImageDetectionPrediction, title: str = "prediction"
+        self,
+        img: ImageDetectionPrediction,
+        title: str = "prediction",
+        show_conf: bool = True,
     ):
         SWLOG.debug(f"Saving visualisation: {title}")
         # if the maximum dimension is greater than 1000px, resize it
         if max(img.image.shape) > MAX_IMAGE_SIZE:
             img = SlidingWindowDetect._resize_image(img, MAX_IMAGE_SIZE)
-        img.save(f"{title}.png")
+        img.save(f"{title}.png", show_confidence=show_conf)
 
     def _process_metrics(self, metrics):
         # add some extra metrics
@@ -697,14 +731,13 @@ class SlidingWindowDetect:
             print("-" * 50)
 
     def detect(self, image: str):
-        SWLOG.debug(f"Detecting {image}")
         image = self._image_from_path(image)
         if self.ground_truth_path is not None:
             self._set_coco_gt(image)
         windows, stride = self._get_windows(image)
         SWLOG.debug(
             f"Number of windows: {windows.shape[0] * windows.shape[1]}"
-            f"({windows.shape[0]}x{windows.shape[1]})"
+            f"({windows.shape[1]}x{windows.shape[0]})"
         )
         predictions = self._predict_windows(windows)
         img_prediction = self._combine_windows(
@@ -760,7 +793,14 @@ def parse_args():
         const=logging.DEBUG,
         default=logging.INFO,
     )
-    parser.add_argument("-d", "--debug", type=bool, help="Debug mode", default=False)
+    parser.add_argument(
+        "-d",
+        "--debug",
+        help="Debug mode",
+        action="store_const",
+        const=True,
+        default=False,
+    )
     return parser.parse_args()
 
 
@@ -784,7 +824,12 @@ def main():
 
     img_pred = sw.detect(args.image_path)
     sw.print_metrics(sw.get_metrics_imgpred(img_pred))
-    sw.save_visualisation(img_pred)
+
+    # Get name from path
+    name = args.image_path.split("/")[-1]
+    name = ".".join(name.split(".")[:-1])
+
+    sw.save_visualisation(img_pred, name=name)
 
 
 if __name__ == "__main__":
