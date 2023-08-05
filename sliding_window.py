@@ -365,13 +365,13 @@ class SlidingWindowDetect:
 
         class_names = self._update_labels(class_names, labels)
 
-        # if self.debug:
-        #     SWLOG.debug("Saving before nms")
-        #     pred = self._create_prediction(bboxes, confs, labels, image)
-        #     img = ImageDetectionPrediction(
-        #         image=image, prediction=pred, class_names=class_names
-        #     )
-        #     self.save_visualisation(img, "before_nms", save_gt=False)
+        if self.debug:
+            SWLOG.debug("Saving before nms")
+            pred = self._create_prediction(bboxes, confs, labels, image)
+            img = ImageDetectionPrediction(
+                image=image, prediction=pred, class_names=class_names
+            )
+            self.save_visualisation(img, "before_nms", save_gt=False)
 
         bboxes, confs, labels = self._nms(bboxes, confs, labels)
 
@@ -446,10 +446,10 @@ class SlidingWindowDetect:
                 p_label_idxs = [self._gt_classes.index(c) for c in p_label_classes]
                 p.prediction.labels = np.asarray(p_label_idxs)
 
-                # if self.debug and len(p_label_idxs) > 0:
-                #     SWLOG.debug(f"Saving pred_{i}_{j}.png")
-                #     os.makedirs("patches", exist_ok=True)
-                #     p.save(f"patches/pred_{i}_{j}.png")
+                if self.debug and len(p_label_idxs) > 0:
+                    SWLOG.debug(f"Saving pred_{i}_{j}.png")
+                    os.makedirs("patches", exist_ok=True)
+                    p.save(f"patches/pred_{i}_{j}.png")
 
                 img_coco_boxes = coco.BoundingBox.from_image_detection_prediction(
                     f"{i}_{j}", p
@@ -523,7 +523,6 @@ class SlidingWindowDetect:
                     # for every window, get the relative window version of the bbox
                     rel_bbox = self._image_to_window_bbox(bbox, j, i, stride)
                     window_bbox = (0, 0, self.window_size, self.window_size)
-                    # np.asarray([0, 0, self.window_size, self.window_size])
                     # If bbox is not out of bounds of the
                     # window with minimum 10% overlap
                     if self._box_in_window(rel_bbox, window_bbox):
@@ -562,9 +561,6 @@ class SlidingWindowDetect:
         x2 = min(box1[2], box2[2])
         y2 = min(box1[3], box2[3])
         return self._box_area((x1, y1, x2, y2))
-        # x1, y1 = np.maximum(box1[:2], box2[:2])
-        # x2, y2 = np.minimum(box1[2:], box2[2:])
-        # return np.maximum(0, x2 - x1) * np.maximum(0, y2 - y1)
 
     def _box_area(self, box: tuple[float, float, float, float]):
         return max(0, box[2] - box[0]) * max(0, box[3] - box[1])
