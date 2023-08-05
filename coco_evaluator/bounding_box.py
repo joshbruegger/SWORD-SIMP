@@ -61,10 +61,10 @@ class BoundingBox:
         """
 
         self._image_name = image_name
-        self._type_coordinates = type_coordinates
+        # self._type_coordinates = type_coordinates
         self._confidence = confidence
         self._class_id = class_id
-        self._format = format
+        # self._format = format
         if bb_type == BBType.DETECTED and confidence is None:
             raise ValueError(
                 "For bb_type='Detected', it is necessary to inform the confidence value."
@@ -80,16 +80,15 @@ class BoundingBox:
 
         if format == BBFormat.YOLO:
             assert self._width_img is not None and self._height_img is not None
-            self._format = BBFormat.XYWH
-            self._type_coordinates = CoordinatesType.RELATIVE
+            # self._format = BBFormat.XYWH
+            format = BBFormat.XYWH
+            # self._type_coordinates = CoordinatesType.RELATIVE
+            type_coordinates = CoordinatesType.RELATIVE
 
-        self.set_coordinates(
-            coordinates, img_size=img_size, type_coordinates=self._type_coordinates
-        )
+        self.set_coordinates(coordinates, type_coordinates, format, img_size=img_size)
 
     # Fixed by Josh Bruegger
-    def set_coordinates(self, coordinates, type_coordinates, img_size=None):
-        self._type_coordinates = type_coordinates
+    def set_coordinates(self, coordinates, type_coordinates, format, img_size=None):
         if type_coordinates == CoordinatesType.RELATIVE and img_size is None:
             raise IOError(
                 "Parameter 'img_size' is required. It is necessary to inform the image size."
@@ -100,7 +99,8 @@ class BoundingBox:
             self._width_img = img_size[0]
             self._height_img = img_size[1]
 
-            assert self._format in [
+            # assert self._format in [
+            assert format in [
                 BBFormat.XYWH,
                 BBFormat.XYX2Y2,
             ], "for relative coordinates, the format must be XYWH or XYXY"
@@ -108,7 +108,8 @@ class BoundingBox:
             # Convert to absolute values
             coordinates = rel_to_abs(coordinates, img_size)
 
-            if self._format == BBFormat.XYWH:
+            # if self._format == BBFormat.XYWH:
+            if format == BBFormat.XYWH:
                 coordinates = xywh_to_xyxy(coordinates)
 
             self._x, self._y, self._x2, self._y2 = coordinates
@@ -116,14 +117,16 @@ class BoundingBox:
             self._h = self._y2 - self._y
 
         elif type_coordinates == CoordinatesType.ABSOLUTE:
-            if self._format == BBFormat.XYWH:
+            # if self._format == BBFormat.XYWH:
+            if format == BBFormat.XYWH:
                 self._h = coordinates[3]
                 self._w = coordinates[2]
                 self._y = coordinates[1] - self._h / 2.0
                 self._x = coordinates[0] - self._w / 2.0
                 self._x2 = self._x + self._w
                 self._y2 = self._y + self._h
-            elif self._format == BBFormat.XYX2Y2:  # <left> <top> <right> <bottom>.
+            # elif self._format == BBFormat.XYX2Y2:  # <left> <top> <right> <bottom>.
+            elif format == BBFormat.XYX2Y2:
                 self._x = coordinates[0]
                 self._y = coordinates[1]
                 self._x2 = coordinates[2]
@@ -221,17 +224,17 @@ class BoundingBox:
         """
         return self._confidence
 
-    def get_format(self):
-        """Get the format of the bounding box (BBFormat.XYWH or BBFormat.XYX2Y2).
+    # def get_format(self):
+    # """Get the format of the bounding box (BBFormat.XYWH or BBFormat.XYX2Y2).
 
-        Returns
-        -------
-        Enum
-            Format of the bounding box. It can be either:
-                BBFormat.XYWH: <left> <top> <width> <height>
-                BBFomat.XYX2Y2: <left> <top> <right> <bottom>.
-        """
-        return self._format
+    # Returns
+    # -------
+    # Enum
+    #     Format of the bounding box. It can be either:
+    #         BBFormat.XYWH: <left> <top> <width> <height>
+    #         BBFomat.XYX2Y2: <left> <top> <right> <bottom>.
+    # """
+    # return self._format
 
     def set_class_id(self, class_id):
         self._class_id = class_id
@@ -280,16 +283,16 @@ class BoundingBox:
         return max(self._x2 - self._x, 0) * max(self._y2 - self._y, 0)
         # return (self._x2 - self._x + 1) * (self._y2 - self._y + 1)
 
-    def get_coordinates_type(self):
-        """Get type of the coordinates (CoordinatesType.RELATIVE or CoordinatesType.ABSOLUTE).
+    # def get_coordinates_type(self):
+    #     """Get type of the coordinates (CoordinatesType.RELATIVE or CoordinatesType.ABSOLUTE).
 
-        Returns
-        -------
-        Enum
-            Enum representing if the bounding box coordinates (x,y,w,h) are absolute or relative
-                to size of the image (CoordinatesType.RELATIVE or CoordinatesType.ABSOLUTE).
-        """
-        return self._type_coordinates
+    #     Returns
+    #     -------
+    #     Enum
+    #         Enum representing if the bounding box coordinates (x,y,w,h) are absolute or relative
+    #             to size of the image (CoordinatesType.RELATIVE or CoordinatesType.ABSOLUTE).
+    #     """
+    #     return self._type_coordinates
 
     def get_bb_type(self):
         """Get type of the bounding box that represents if it is a ground-truth or detected box.
