@@ -18,7 +18,7 @@ module load Boost/1.79.0-GCC-11.3.0
 
 module list
 
-export PATH=/home4/s4361687/.local/bin:$PATH
+export PATH=$HOME/.local/bin:$PATH
 
 echo "Installing packages..."
 pdm install --venv
