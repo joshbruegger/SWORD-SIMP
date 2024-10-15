@@ -38,6 +38,9 @@ pdm list
 # Activate the virtual environment
 echo "Activating virtual environment..."
 eval $(pdm venv activate)
+
+pip install --upgrade --no-cache-dir gdown
+
 # source $HOME/.envs/thesis_env/bin/activate
 
 # # make sure the requirements are installed
